@@ -313,11 +313,11 @@ const LEADS = [
   "Самый быстрый маршрут пересчитывается на каждом вызове: запрос уходит к провайдеру с наименьшей задержкой."
 ];
 
-// [question, [label, highlighted, position override], [[mark, name, sub, badge] × 2 (second is active)]]
+// [question, [label, highlighted, desktop position override], [[mark, name, sub, badge] × 2 (second is active)]]
 const DIAGS = [
   ["Сбой провайдера?", [["основной", 0], ["резерв", 1]],
     [["AN", "Claude Opus 5", "Anthropic", "сбой"], ["AW", "Claude Opus 5", "Amazon Bedrock", "активен"]]],
-  ["Стоимость токенов?", [["дешевле", 1, "left:76px;top:171px"], ["дороже", 0, "left:88px;top:89px"]],
+  ["Стоимость токенов?", [["дешевле", 1, "--x:76px;--y:171px"], ["дороже", 0, "--x:88px;--y:89px"]],
     [["OA", "GPT-5.6 Sol", "openai/gpt-5.6-sol", "$30.00 / M"], ["DS", "DeepSeek V4 Flash", "deepseek/deepseek-v4-flash", "$0.03 / M"]]],
   ["Минимальный latency?", [["2.9s", 0], ["0.2s", 1]],
     [["OA", "GPT-5.6 Sol", "126 tps", "медленнее"], ["TM", "Inkling Small", "607 tps", "быстрее"]]]
@@ -360,18 +360,21 @@ const CLOSE = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-
 const diag = ([q, labels, cards], i) => `<div class="diag" data-diag="${i}"${i ? ' style="display:none"' : ""}>
 <div class="appcard"><div class="dots"><i></i><i></i><i></i></div><div class="apt">Ваше приложение</div><i class="ab" style="width:82%;margin-bottom:8px"></i><i class="ab" style="width:58%;margin-bottom:16px"></i><i class="ab ab58"></i><i class="ab" style="width:72%;margin-bottom:8px"></i><i class="ab" style="width:40%"></i></div>
 <div class="conn"></div><div class="qbox">${q}</div>
-<div class="branch"><svg viewBox="0 0 100 280" preserveAspectRatio="none" aria-hidden="true"><path d="M0 140 C 40 140, 46 44, 100 44" fill="none" stroke="#4A4A4A" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" style="animation:dashflow 1.4s linear infinite"/><path d="M0 140 C 40 140, 46 236, 100 236" fill="none" stroke="#DEDEDE" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>${map(labels, ([t, w, s]) => `<span class="bl${w ? " w" : ""}"${s ? ` style="${s}"` : ""}>${t}</span>`)}</div>
-<div class="cards">${map(cards, ([mk, n, sub, b], j) => `<div class="card${j ? " on" : ""}"><span class="mk">${mk}</span><div class="cnm"><div>${n}</div><div>${sub}</div></div><span class="bdg">${b}</span></div>`)}</div>
+<div class="branch"><svg class="bd" viewBox="0 0 100 280" preserveAspectRatio="none" aria-hidden="true"><path class="dash" d="M0 140 C 40 140, 46 44, 100 44"/><path d="M0 140 C 40 140, 46 236, 100 236"/></svg><svg class="bm" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path class="dash" d="M50 0 C 50 50, 25 50, 25 100"/><path d="M50 0 C 50 50, 75 50, 75 100"/></svg>${map(labels, ([t, w, s]) => `<span class="bl${w ? " w" : ""}"${s ? ` style="${s}"` : ""}>${t}</span>`)}</div>
+<div class="cards">${map(cards, ([mk, n, sub, b], j) => `<div class="card${j ? " on" : ""}"><span class="mk">${mk}</span><div class="cnm"><div>${n}</div><div>${sub.replace(/\/(.+)/, "/<span>$1</span>")}</div></div><span class="bdg">${b}</span></div>`)}</div>
 </div>`;
 
 const ct = (n, h, p) => `<div class="ct"><div class="ctn"><span>${n}</span><h3>${h}</h3></div><p>${p}</p></div>`;
 
 const brow = ([n, w, v], i) => `<div class="brow${i ? "" : " a"}"><span>${n}</span><span class="bar"><i style="width:${w}%"></i></span><span>${v}</span></div>`;
 
-const row = r => `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm">${r.name}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi">${r.input}</span><span class="tv hi po">${r.output}</span><span class="cc"><span>Read:<br>Write:</span><span>${r.cacheRead}<br>${r.cacheWrite}</span></span><span class="wc"><span>${r.web}</span><span>${r.webSub}</span></span></div>`;
+// The provider prefix gets its own span: inline on desktop, a separate grey line on phones.
+const row = r => {
+  const i = r.name.indexOf("/") + 1;
+  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi">${r.input}</span><span class="tv hi po">${r.output}</span><span class="cc"><span>Read:<br>Write:</span><span>${r.cacheRead}<br>${r.cacheWrite}</span></span><span class="wc"><span>${r.web}</span><span>${r.webSub}</span></span></div>`;
+};
 
-const anim = (attr, r, values) => `<animate attributeName="${attr}" dur="${r.dur}" keyTimes="${r.times}" values="${values}" repeatCount="indefinite"/>`;
-const globe = () => `<svg viewBox="-2 -2 804 404" role="img" aria-label="Animated global delivery network"><defs><linearGradient id="grid-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset=".78" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="hemisphere-mask"><rect x="-4" y="-4" width="808" height="412" fill="url(#grid-fade)"/></mask></defs><g mask="url(#hemisphere-mask)"><g class="grid">${map(GRID, d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<g mask="url(#hemisphere-mask)"><path class="packet" d="${r.d}" stroke="url(#${r.id}-gradient)">${anim("opacity", r, r.opacity)}</path><defs><radialGradient class="pg" id="${r.id}-gradient" cx="100" cy="100" r="0" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="0.4"/><stop offset="1" stop-opacity="0"/>${anim("cx", r, r.cx)}${anim("cy", r, r.cy)}${anim("r", r, r.r)}</radialGradient></defs></g>`)}</g>${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
+const globe = () => `<svg viewBox="-2 -2 804 404" role="img" aria-label="Animated global delivery network"><defs><linearGradient id="grid-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset=".78" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="hemisphere-mask"><rect x="-4" y="-4" width="808" height="412" fill="url(#grid-fade)"/></mask></defs><g mask="url(#hemisphere-mask)"><g class="grid">${map(GRID, d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<g mask="url(#hemisphere-mask)"><path class="packet" d="${r.d}" stroke="url(#${r.id}-gradient)"/><defs><radialGradient class="pg" id="${r.id}-gradient" cx="100" cy="100" r="0" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="0.4"/><stop offset="1" stop-opacity="0"/></radialGradient></defs></g>`)}</g>${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
 
 const page = () => `
 <header class="hd"><div class="wrap">
@@ -409,9 +412,9 @@ const page = () => `
 <div class="lgw"><div class="logos">
 <img src="${BASE}logos/atom.png" alt="Atom" class="l-atom">
 <img src="${BASE}logos/yadro.svg" alt="Yadro" class="l-yadro">
-<div style="gap:9px"><img src="${BASE}logos/directum-mark.svg" alt="" class="l-dir"><span>Directum</span></div>
+<div><img src="${BASE}logos/directum-mark.svg" alt="" class="l-dir"><span>Directum</span></div>
 <img src="${BASE}logos/nexign.png" alt="Nexign" class="l-nx">
-<div style="gap:10px"><span class="sq"></span><img src="${BASE}logos/positive.svg" alt="Positive Technologies" class="l-pt"></div>
+<div><span class="sq"></span><img src="${BASE}logos/positive.svg" alt="Positive Technologies" class="l-pt"></div>
 </div></div>
 </section>
 
@@ -426,7 +429,7 @@ const page = () => `
 <h2 class="h2c">Один API, сотни моделей</h2>
 <div class="tbl" id="tbl">
 <div class="tbar">
-<div class="seg s2">${map(MODS, ([k, t], i) => `<button data-mod="${k}"${i ? "" : ' class="on"'}>${t || k}</button>`)}</div>
+<div class="seg s2 xs">${map(MODS, ([k, t], i) => `<button data-mod="${k}"${i ? "" : ' class="on"'}>${t || k}</button>`)}</div>
 <div class="dd"><button class="ddb" data-menu-btn="prov"><span id="provlabel">Все провайдеры</span>${CHEV}</button><div class="ddm sc" data-menu="prov">${map(PROVS, (k, i) => `<button data-prov="${k}"${i ? "" : ' class="on"'}>${PROV_LABELS[k]}</button>`)}</div></div>
 <div class="filters">
 <div class="dd"><button class="ddb" data-menu-btn="sort"><span class="dim">Сортировка</span><span id="sortlabel">по дате</span>${CHEV}</button><div class="ddm r" data-menu="sort">${map(Object.keys(SORT_LABELS), (k, i) => `<button data-sort="${k}"${i ? "" : ' class="on"'}>${SORT_LABELS[k]}</button>`)}</div></div>
@@ -434,9 +437,9 @@ const page = () => `
 </div>
 </div>
 <div class="srch"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="#4A4A4A" stroke-width="1.3"/><path d="m10.6 10.6 3 3" stroke="#4A4A4A" stroke-width="1.3" stroke-linecap="square"/></svg><input id="search" type="text" placeholder="Поиск модели..." autocomplete="off"></div>
-<div class="xs" style="overflow-x:auto"><div class="tmin">
+<div class="tsc xs"><div class="tmin">
 <div class="th"><span>Модель</span><span class="r">Context</span><span class="r">Latency</span><span class="r">Throughput</span><span class="r">Input</span><span class="r" style="padding-right:18px">Output</span><span class="cc">Cache</span><span class="wc">Web Search</span></div>
-<div class="tbody xs" id="tbody"></div>
+<div id="tbody"></div>
 </div></div>
 <div class="tfoot"><span id="count"></span><span>прокрутите список ↓</span></div>
 </div>
@@ -446,7 +449,7 @@ const page = () => `
 <h2 class="h2p">Облачная платформа</h2>
 <div class="g2 cgrid">
 <div class="br bb"><div class="viz c"><div class="dia">
-<span class="sp sv" style="top:38px"></span><span class="sp sv" style="top:178px"></span><span class="sp sh" style="left:96px"></span><span class="sp sh" style="right:96px"></span>
+<span class="sp sv" style="top:38px"></span><span class="sp sv" style="top:178px"></span><span class="sp sh" style="left:30%"></span><span class="sp sh" style="right:30%"></span>
 <span class="dmd"></span><span class="pl"></span><span class="pl"></span>
 <span class="node nx" style="top:8px">INIT</span><span class="node nx" style="top:204px">EVAL</span><span class="node" style="left:0;top:106px">PUSH</span><span class="node" style="right:0;top:106px">DEVELOP</span>
 </div></div>${ct("01", "RL окружение", "Инициализация, разработка, оценка и публикация окружения.")}</div>
@@ -454,7 +457,7 @@ const page = () => `
 <div class="envs"><div class="env on"><div>alphy/<b>logic-env</b></div><div class="em"><span>0.2.17</span><span>PRIMEINTELLECT</span></div><div class="evb">Оценить</div></div>${map(ENVS, ([n, v, o]) => `<div class="env"><div>${n}</div><div class="em"><span>${v}</span><span>${o}</span></div></div>`)}</div>
 <div class="evals"><div class="eh"><span>ID</span><span>РЕЗУЛЬТАТ</span><span>ОЦЕНКА</span></div>${map(EVALS, ([s, c], i) => `<div class="er"><span>${i + 1}</span><span>"answer": "[2, 3, 4,…</span><span style="color:${c}">${s}</span></div>`)}</div>
 </div>${ct("02", "Оценки и бенчмарки", "Гибкая оценка производительность моделей")}</div>
-<div class="br"><div class="viz">
+<div class="br"><div class="viz trn">
 <div class="rw"><div class="rwh"><span>Награда</span><span id="rv">0.92</span></div>
 <div class="rwb"><div class="ax"><span>1</span><span>0.8</span><span>0.6</span><span>0.4</span><span>0.2</span><span>0</span></div>
 <div class="chart" id="chart"><span id="shade"></span><span id="cur"></span><span id="dot"></span><svg viewBox="0 0 600 210" preserveAspectRatio="none" aria-hidden="true">${map([150, 300, 450], x => `<line x1="${x}" y1="0" x2="${x}" y2="210" stroke="#131313" stroke-width="1" vector-effect="non-scaling-stroke"/>`)}<polyline id="poly" points="${POINTS}" fill="none" stroke="#EDEDED" stroke-width="1" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg></div></div>
@@ -467,13 +470,13 @@ const page = () => `
 <div class="ep"><div class="lbl">ЭНДПОИНТ</div><div class="cnm2">Выделенный</div><div class="eps"><i></i><span>1.2s · 145 tps</span></div></div>
 </div></div>${ct("04", "Инференс", "Выделенный инференс для ваших моделей с поддержкой LoRA.")}</div>
 </div>
-<div class="ctaw"><a href="#top" class="bw lg">Начать обучение</a></div>
+<div class="ctaw"><button class="bw lg" data-act="login">Начать обучение</button></div>
 </section>
 
 <section id="bench" class="wrap st2">
 <div class="g2 bh"><h2>Скорость через API</h2><div style="padding-bottom:4px"><p>Qwen 3.8 27B-A3B, text-only, 4k input → 512 output. Независимый замер MLX:&nbsp;<a href="https://www.yukon.org/mlxfast" target="_blank" rel="noreferrer">yukon.org/mlxfast</a>.</p></div></div>
 <div class="g2 bgrid">
-<div class="bc bc1 br"><div class="bct"><div class="k">TOKENS / SEC</div><div>больше — лучше</div></div><div class="brs">${map(TPS, brow)}</div><div class="bf">+6,7% к ближайшему результату</div></div>
+<div class="bc br"><div class="bct"><div class="k">TOKENS / SEC</div><div>больше — лучше</div></div><div class="brs">${map(TPS, brow)}</div><div class="bf">+6,7% к ближайшему результату</div></div>
 <div class="bc"><div class="bct"><div class="k">TTFT, МС</div><div>меньше — лучше</div></div><div class="brs">${map(TTFT, brow)}</div><div class="bf">в 2,3 раза быстрее отклик, чем у Selectel</div></div>
 </div>
 <div class="g5 sla">${map(SLA, ([k, t]) => `<div><div class="k">${k}</div><div>${t}</div></div>`)}</div>
@@ -586,6 +589,35 @@ function ocean(c) {
     gl.uniform2f(uRes, w, h);
     gl.uniform1f(uTime, (now - start) / 1000);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+  requestAnimationFrame(frame);
+}
+
+/* ---------- globe packets ---------- */
+
+// The design animated the packets with SMIL <animate> on the gradients. Safari advances those values but
+// never repaints the strokes, so the packets stood still on iPhones; the same keyframes are played from JS.
+function globeAnim(svg) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const paths = svg.querySelectorAll(".packet"), grads = svg.querySelectorAll("radialGradient");
+  const nums = s => s.split(";").map(Number);
+  const tracks = ROUTES.map((r, i) => ({
+    dur: parseFloat(r.dur) * 1000,
+    times: nums(r.times),
+    keys: [[paths[i], "opacity", nums(r.opacity)], [grads[i], "cx", nums(r.cx)], [grads[i], "cy", nums(r.cy)], [grads[i], "r", nums(r.r)]]
+  }));
+  let visible = false;
+  new IntersectionObserver(e => { visible = e[e.length - 1].isIntersecting; }).observe(svg);
+  const frame = now => {
+    requestAnimationFrame(frame);
+    if (!visible) return;
+    for (const t of tracks) {
+      const p = now % t.dur / t.dur;
+      let k = 0;
+      while (k < t.times.length - 2 && p >= t.times[k + 1]) k++;
+      const f = (p - t.times[k]) / (t.times[k + 1] - t.times[k]);
+      for (const [el, attr, v] of t.keys) el.setAttribute(attr, (v[k] + (v[k + 1] - v[k]) * f).toFixed(2));
+    }
   };
   requestAnimationFrame(frame);
 }
@@ -933,17 +965,14 @@ function renderRows() {
   $("count").textContent = rows.length + " моделей в выборке · всего 324 в Gateway";
 }
 
+// Hidden columns are classes on the table (.nc — no cache, .nw — no web search); CSS picks the grid template.
 function toggleCol(key, btn) {
   cols[key] = !cols[key];
-  const tbl = $("tbl"), box = btn.querySelector(".box");
-  tbl.style.setProperty("--" + key, cols[key] ? "flex" : "none");
+  const box = btn.querySelector(".box");
+  $("tbl").classList.toggle(key === "cache" ? "nc" : "nw", !cols[key]);
   box.classList.toggle("off", !cols[key]);
   box.textContent = cols[key] ? "✓" : "";
   $("colcount").textContent = "(" + (12 + cols.cache + cols.web) + ")";
-  const tc = ["2.4fr", ".72fr", ".78fr", ".92fr", ".82fr", ".86fr"];
-  if (cols.cache) tc.push("1.15fr");
-  if (cols.web) tc.push("1.15fr");
-  tbl.style.setProperty("--tc", tc.join(" "));
 }
 
 const closeMenus = () => $$(".ddm").forEach(m => m.classList.remove("open"));
@@ -1011,6 +1040,7 @@ function mount() {
   root.innerHTML = page();
   document.body.prepend(root);
   ocean(root.querySelector(".ocean canvas"));
+  globeAnim(root.querySelector(".globe svg"));
   renderRows();
   bindEvents();
   bindPanel();
