@@ -376,6 +376,57 @@ const row = r => {
 
 const globe = () => `<svg viewBox="-2 -2 804 404" role="img" aria-label="Animated global delivery network"><defs><linearGradient id="grid-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset=".78" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="hemisphere-mask"><rect x="-4" y="-4" width="808" height="412" fill="url(#grid-fade)"/></mask></defs><g mask="url(#hemisphere-mask)"><g class="grid">${map(GRID, d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<g mask="url(#hemisphere-mask)"><path class="packet" d="${r.d}" stroke="url(#${r.id}-gradient)"/><defs><radialGradient class="pg" id="${r.id}-gradient" cx="100" cy="100" r="0" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="0.4"/><stop offset="1" stop-opacity="0"/></radialGradient></defs></g>`)}</g>${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
 
+/* BARS: shared topics keep the copy, diagram and technical notes in sync. */
+const BARS_TOPICS = {
+  bars: { title: "Alphy BARS", technical: "BAR-based Activation Routing System", note: "Маршрутизируем вычисления к эксперту в нужном ярусе памяти. Между видеокартами передаём активации через BAR1." },
+  token: { title: "По шине — только токен", technical: "Вектор активаций токена", note: "Килобайты активаций идут к нужному эксперту. Мегабайты весов модели остаются там, где хранятся." },
+  p2p: { title: "Прямой обмен между GPU", technical: "P2P через BAR1, ACS отключён, IOMMU в passthrough", note: "GPU обмениваются активациями напрямую, минуя процессор и оперативную память. 0,4 мкс вместо 14 мкс — в 35 раз быстрее." },
+  gpu: { title: "Первый ярус · видеопамять", technical: "GDDR7", note: "8 GPU, суммарно 256 ГБ. Каждый эксперт хранится один раз; часто срабатывающие вместе эксперты расположены рядом." },
+  ram: { title: "Второй ярус · оперативная память", technical: "MRDIMM-8800, 24 канала, ~1,6 ТБ/с", note: "1,5 ТБ для менее востребованных экспертов. Два Xeon 6 вычисляют их прямо в этом ярусе, без переноса весов на GPU." },
+  cpu: { title: "Вычисления на месте", technical: "Матричные блоки AMX", note: "Два Xeon 6 обрабатывают экспертов из оперативной памяти с помощью AMX. Вычисления приходят к модели." },
+  nvme: { title: "Третий ярус · NVMe", technical: "Gen5, RAID0, выравнивание по 4K", note: "8 NVMe-дисков, ~100 ГБ/с. Редкие эксперты подгружаются на слой раньше, чем понадобятся." },
+  pcie: { title: "Своя линия каждому устройству", technical: "192 линии PCIe 5.0: карты x16, диски x4", note: "Каждой GPU выделен x16, каждому NVMe — x4. Устройства не делят свою линию с соседями." }
+};
+const barsTerm = (key, label) => `<button type="button" class="bars-term" data-bars="${key}" aria-label="${label}: технические подробности">${label}<span aria-hidden="true">↗</span></button>`;
+const barsIcon = kind => `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">${kind === "chip" ? '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/>' : kind === "ram" ? '<rect x="4" y="5" width="16" height="13" rx="2"/><path d="M7 9h3v5H7zm7 0h3v5h-3zM7 18v3m5-3v3m5-3v3"/>' : kind === "token" ? '<path d="m12 3 9 5v8l-9 5-9-5V8l9-5Zm0 9 9-4m-9 4L3 8m9 4v9"/>' : '<path d="M4 8h16M4 16h16m-4-12 4 4-4 4M8 12l-4 4 4 4"/>'}</svg>`;
+const barsDiagram = () => `<figure class="bars-figure" aria-label="Интерактивная схема архитектуры Alphy BARS">
+<div class="bars-figure-head"><span class="k">АРХИТЕКТУРА BARS</span><span class="bars-live m"><i></i>3 яруса памяти</span></div>
+<div class="bars-board">
+<svg class="bars-wires" viewBox="0 0 600 580" preserveAspectRatio="none" fill="none" aria-hidden="true">
+<g class="bars-wire" data-bars-link="bars gpu p2p token">${map(Array.from({length:8}), (_, i) => `<path d="M${81 + i * 62.5} 158V185H300"/>`)}<path d="M300 185v24"/></g>
+<g class="bars-wire bars-wire-token" data-bars-link="bars token p2p"><path d="M128 240h42"/><path class="bars-packet" d="M128 240h42"/></g>
+<g class="bars-wire" data-bars-link="pcie gpu"><path d="M50 110H20v184h110v37M550 110h30v184H470v37"/></g>
+<g class="bars-wire" data-bars-link="ram cpu"><path d="M220 371h20M360 371h20"/><path class="bars-packet" d="M220 371h20M360 371h20"/></g>
+<g class="bars-wire" data-bars-link="nvme pcie"><path d="M130 411v79M470 411v79"/><path class="bars-packet bars-packet-up" d="M130 490v-79M470 490v-79"/></g>
+<text x="38" y="283">x16</text><text x="540" y="283">x16</text><text x="142" y="462">x4 × 4</text><text x="422" y="462">x4 × 4</text>
+<text class="bars-wire-caption" x="300" y="304" text-anchor="middle">веса остаются на месте</text>
+</svg>
+<button type="button" class="bars-node bars-gpu" data-bars="gpu" data-bars-node="bars gpu p2p token pcie" aria-pressed="false">
+<span class="bars-node-heading"><span>8 × GPU</span><span class="m">256 ГБ <small>GDDR7</small></span></span>
+<span class="bars-gpu-cards">${map(Array.from({length:8}), (_, i) => `<span class="bars-gpu-card">${barsIcon("chip")}<span class="m">0${i + 1}</span></span>`)}</span>
+<span class="bars-node-foot">Частые эксперты · без дублей <span aria-hidden="true">↗</span></span></button>
+<button type="button" class="bars-node bars-token" data-bars="token" data-bars-node="token" aria-pressed="false">${barsIcon("token")}<span>Токен</span><small class="m">килобайты</small></button>
+<button type="button" class="bars-node bars-p2p" data-bars="p2p" data-bars-node="bars p2p token" aria-pressed="false">${barsIcon("link")}<span><b>GPU ↔ GPU</b><small class="m">P2P / BAR1</small></span><span class="bars-latency m">0,4<small>мкс</small></span></button>
+${map(["01", "02"], (n, i) => `<button type="button" class="bars-node bars-cpu bars-cpu-${i}" data-bars="cpu" data-bars-node="cpu ram pcie" aria-pressed="false">${barsIcon("chip")}<span><b>Xeon 6</b><small class="m">AMX · CPU ${n}</small></span><span class="bars-node-arrow" aria-hidden="true">↗</span></button>`)}
+<button type="button" class="bars-node bars-ram" data-bars="ram" data-bars-node="ram cpu" aria-pressed="false">${barsIcon("ram")}<b class="m">1,5 ТБ</b><span>MRDIMM</span><small>Менее частые</small></button>
+<button type="button" class="bars-pcie m" data-bars="pcie" data-bars-node="pcie" aria-pressed="false">192 линии PCIe 5.0 <span aria-hidden="true">↗</span></button>
+<button type="button" class="bars-node bars-nvme" data-bars="nvme" data-bars-node="nvme pcie" aria-pressed="false"><span class="bars-node-heading"><span>8 × NVMe</span><span class="m">~100 ГБ/с</span></span><span class="bars-drives">${map(Array.from({length:8}), () => '<i><span></span></i>')}</span><span class="bars-node-foot">Редкие эксперты · предзагрузка <span aria-hidden="true">↗</span></span></button>
+</div>
+<figcaption class="bars-detail"><div class="bars-detail-label m" id="bars-detail-title">ВЫЧИСЛЕНИЯ → К МОДЕЛИ</div><p id="bars-detail-note">Выберите элемент, чтобы увидеть его роль и связи. Эксперты остаются в памяти, к ним приходят вычисления.</p><div class="bars-detail-tech m" id="bars-detail-tech">GPU · MRDIMM · NVMe</div></figcaption>
+</figure>`;
+const barsSection = () => `<section id="how" class="wrap st2 bars-section" aria-labelledby="bars-title">
+<div class="bars-heading"><h2 id="bars-title">Как это работает</h2><span class="bars-hint"><span aria-hidden="true">↗</span><span class="bars-hover-hint">Наведите на текст или схему</span><span class="bars-touch-hint">Нажмите на текст или схему</span></span></div>
+<div class="bars-layout"><div class="bars-copy">
+<p class="bars-intro" data-bars-copy="bars">${barsTerm("bars", "Alphy BARS")}<br><span>синтетический NVLink</span></p>
+<div class="bars-copy-block" data-bars-copy="token p2p"><p>Чтобы модель работала на нескольких видеокартах, между ними гоняются куски самой модели, а это мегабайты. У нас же по шине едет <strong>только ${barsTerm("token", "токен")}</strong>, то есть то, что модель обрабатывает прямо сейчас, а это <strong>килобайты</strong>.</p><p>Карты ${barsTerm("p2p", "общаются напрямую")}, минуя процессор и оперативную память, поэтому данные доходят за <strong class="m">0,4 мкс</strong> вместо обычных 14. <span class="bars-speed">Это в <strong>35 раз</strong> быстрее.</span></p></div>
+<div class="bars-copy-block" data-bars-copy="gpu"><p>Каждая часть модели (эксперт) хранится <strong>в одном месте, без дублей</strong>. Самые востребованные лежат прямо на видеокартах, причём те, что обычно срабатывают вместе, расположены рядом. Поэтому ${barsTerm("gpu", "256 ГБ видеопамяти")} дают <strong>256 ГБ места</strong>, а не восемь копий одного и того же.</p></div>
+<div class="bars-copy-block" data-bars-copy="ram cpu nvme"><p>Менее востребованные эксперты лежат в ${barsTerm("ram", "1,5 ТБ быстрой оперативной памяти")}. Это второй ярус памяти: <strong>два Xeon 6</strong> ${barsTerm("cpu", "считают их прямо на месте")}, без перетаскивания на видеокарты.</p><p>Редко используемые хранятся на ${barsTerm("nvme", "восьми NVMe-дисках (~100 ГБ/с)")} и подгружаются <strong>на слой раньше</strong>, чем понадобятся.</p></div>
+<div class="bars-copy-block" data-bars-copy="pcie"><p>У каждой видеокарты и каждого диска ${barsTerm("pcie", "своя полноценная линия связи")}, ни с кем не поделённая.</p></div>
+<p class="bars-conclusion"><span aria-hidden="true">↳</span> Мы отправляем вычисления туда,<br class="bars-desktop-break"> где лежит модель.</p>
+</div>${barsDiagram()}</div>
+<div class="bars-tooltip" id="bars-tooltip" role="tooltip" hidden><span class="k">ТЕХНИЧЕСКИ</span><span id="bars-tooltip-text"></span></div>
+</section>`;
+
 const page = () => `
 <header class="hd"><div class="wrap">
 <a href="#top" class="logo">alphy</a>
@@ -482,6 +533,8 @@ const page = () => `
 <div class="g5 sla">${map(SLA, ([k, t]) => `<div><div class="k">${k}</div><div>${t}</div></div>`)}</div>
 <div class="g3 kpi">${map(KPI, ([v, l]) => `<div><span>${v}</span><span>${l}</span></div>`)}</div>
 </section>
+
+${barsSection()}
 
 <section id="power" class="wrap st2"><div class="g2 pw"><h2>Ваши модели<br>на наших мощностях</h2><div class="gw"><div class="globe">${globe()}</div></div></div></section>
 
@@ -1034,6 +1087,94 @@ function bindEvents() {
   $("jur").addEventListener("change", e => { $("dial").textContent = e.target.value; });
 }
 
+function bindBars() {
+  const section = $("how"), tooltip = $("bars-tooltip"), figure = section.querySelector(".bars-figure");
+  const controls = Array.from(section.querySelectorAll("[data-bars]"));
+  const parts = Array.from(section.querySelectorAll("[data-bars-node],[data-bars-link],[data-bars-copy]"));
+  const defaults = [$("bars-detail-title").textContent, $("bars-detail-note").textContent, $("bars-detail-tech").textContent];
+  let hovered = null, focused = null, pinned = null, tooltipAnchor = null, closeTimer;
+  const control = target => target instanceof Element ? target.closest("[data-bars]") : null;
+
+  function placeTooltip() {
+    if (!tooltipAnchor || tooltip.hidden) return;
+    const r = tooltipAnchor.getBoundingClientRect(), t = tooltip.getBoundingClientRect();
+    const left = Math.max(12, Math.min(innerWidth - t.width - 12, r.left));
+    const above = r.top - t.height - 10;
+    tooltip.style.left = left + "px";
+    tooltip.style.top = Math.max(12, Math.min(innerHeight - t.height - 12, above > 68 ? above : r.bottom + 10)) + "px";
+  }
+
+  function render() {
+    clearTimeout(closeTimer);
+    const current = hovered || focused || pinned;
+    const key = current && current.dataset.bars, topic = BARS_TOPICS[key];
+    controls.forEach(el => {
+      const active = el.dataset.bars === key;
+      el.classList.toggle("is-active", active);
+      if (el.hasAttribute("aria-pressed")) el.setAttribute("aria-pressed", String(active));
+      el.removeAttribute("aria-describedby");
+    });
+    parts.forEach(el => {
+      const keys = el.dataset.barsNode || el.dataset.barsLink || el.dataset.barsCopy;
+      el.classList.toggle("is-active", !!key && keys.split(" ").includes(key));
+    });
+    $("bars-detail-title").textContent = topic ? topic.title : defaults[0];
+    $("bars-detail-note").textContent = topic ? topic.note : defaults[1];
+    $("bars-detail-tech").textContent = topic ? topic.technical : defaults[2];
+    tooltipAnchor = current && current.classList.contains("bars-term") ? current : null;
+    tooltip.hidden = !tooltipAnchor;
+    if (tooltipAnchor) {
+      $("bars-tooltip-text").textContent = topic.technical;
+      tooltipAnchor.setAttribute("aria-describedby", tooltip.id);
+      placeTooltip();
+    }
+  }
+
+  section.addEventListener("pointerover", e => {
+    if (e.pointerType === "touch") return;
+    const next = control(e.target);
+    if (next) { hovered = next; render(); }
+    else if (tooltip.contains(e.target)) clearTimeout(closeTimer);
+  });
+  section.addEventListener("pointerout", e => {
+    if (e.pointerType === "touch") return;
+    const previous = control(e.target);
+    if (previous && previous.contains(e.relatedTarget)) return;
+    if ((previous || tooltip.contains(e.target)) && !tooltip.contains(e.relatedTarget)) {
+      closeTimer = setTimeout(() => { hovered = null; render(); }, 100);
+    }
+  });
+  section.addEventListener("focusin", e => { focused = control(e.target); render(); });
+  section.addEventListener("focusout", () => { focused = null; render(); });
+  section.addEventListener("click", e => {
+    const next = control(e.target);
+    if (!next) return;
+    const same = pinned && pinned.dataset.bars === next.dataset.bars;
+    pinned = same ? null : next;
+    hovered = focused = null;
+    render();
+  });
+  document.addEventListener("pointerdown", e => {
+    if (control(e.target) && section.contains(e.target) || tooltip.contains(e.target)) return;
+    hovered = focused = pinned = null;
+    render();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    hovered = focused = pinned = null;
+    render();
+  });
+  // Fixed notes follow their term during scrolling; hide when the term leaves the viewport.
+  addEventListener("scroll", () => {
+    if (!tooltipAnchor) return;
+    const r = tooltipAnchor.getBoundingClientRect();
+    if (r.bottom < 64 || r.top > innerHeight) { hovered = focused = pinned = null; render(); }
+    else placeTooltip();
+  }, { passive: true });
+  addEventListener("resize", placeTooltip);
+  figure.querySelector(".bars-detail").setAttribute("aria-live", "polite");
+}
+
 function mount() {
   const root = document.createElement("div");
   root.className = "root";
@@ -1045,6 +1186,7 @@ function mount() {
   bindEvents();
   bindPanel();
   bindChart();
+  bindBars();
   if (!SHOW_DEMO_ANSWER) showNotice();
   if (!API_ENDPOINT.trim()) bindAuto();
   // The markup arrives after load, so jump to a #section from the URL by hand (without smooth scrolling).
