@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
     {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.alphy.chat" }],
+      "destination": "https://alphy.chat/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "www.alphy.chat" }],
       "destination": "https://alphy.chat/:path*",
