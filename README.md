@@ -32,10 +32,12 @@ python3 -m http.server 8080
    `git tag 1.0.0 && git push origin main 1.0.0`.
 2. Vercel: импортировать репозиторий. Preset — Other, build command не нужен.
    `.vercelignore` оставляет в деплое только `index.html` и `vercel.json`.
-3. Домены:
-   - `alphy.chat` и `www.alphy.chat` → этот проект на Vercel;
+3. Домены (DNS в Porkbun):
    - `chat.alphy.chat` → Render-сервис `alphy-chat` (legacy видеочат): Custom Domain
-     в Render и CNAME `chat` → `alphy-chat.onrender.com`.
+     в Render и `CNAME chat → alphy-chat-o07d.onrender.com`;
+   - `alphy.chat` и `www.alphy.chat` → Vercel-проект `alphy-web`:
+     `A @ → 216.198.79.1`, `A @ → 64.29.17.1`,
+     `CNAME www → ac0dc15c4bc9f6c9.vercel-dns-017.com`.
 
 ## Новая версия
 
