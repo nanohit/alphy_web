@@ -100,3 +100,25 @@ jsDelivr по тегу неизменяемы и кэшируются навсе
 
 Форма заявки и вход, как и в макете, ничего никуда не отправляют: только показывают
 сообщение.
+
+
+## Данные каталога и цены (11 октября 2026)
+
+Основные релизы: Claude Haiku 5.5, Mistral Large 4, GPT-6.1 Sol, GPT-6 Astra,
+Claude Opus 5.5, Fable 5.1 и Sonnet 5.5. Их latency/throughput пока не заполнены:
+добавить после замеров, отдельно от тарифов.
+
+- OpenAI: https://developers.openai.com/api/docs/models/gpt-6.1-sol и
+  https://developers.openai.com/api/docs/models/gpt-6-astra.
+- Anthropic: https://platform.claude.com/docs/en/about-claude/pricing.
+  Cache Write — 5 минут; Haiku — цена для промптов до 100K токенов.
+- Mistral: https://docs.mistral.ai/models/mistral-large — текущий тариф public preview.
+- Валюта: 84,9048 ₽ за USD, курс ЦБ на 10.10.2026, действующий 11.10.2026:
+  https://www.cbr.ru/currency_base/daily/?UniDbQuery.Posted=True&UniDbQuery.To=10.10.2026.
+  Исходные тарифы в USD сохраняются в данных, отображение пересчитывает `rublePrice`.
+
+`EVALS` и `TRAINING_RUN` — презентационные данные. При подключении настоящих
+результатов заменить эти массивы. Значение награды и подсказки графика берутся
+из одной серии. Счётчики каталога вычисляются по реальным строкам без дублей.
+Ссылка бенчмарков пока ведёт на https://yukon.org/; после публикации отчёта
+заменить только href на https://yukon.org/alphy.

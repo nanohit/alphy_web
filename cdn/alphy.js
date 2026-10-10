@@ -12,7 +12,25 @@ const SHOW_DEMO_ANSWER = true; // false → the panel starts with the "API не 
 
 /* ---------- data (verbatim from the design) ---------- */
 
+// Pricing sources (checked 2026-10-11):
+// developers.openai.com/api/docs/models/{gpt-6.1-sol,gpt-6-astra}
+// platform.claude.com/docs/en/about-claude/pricing (5-minute cache writes)
+// docs.mistral.ai/models/mistral-large (current public-preview prices)
+// Claude Haiku prices below apply to prompts up to 100K tokens.
+const USD_RUB = 84.9048; // CBR USD rate for 2026-10-10, effective on 2026-10-11.
+const rubleNumber = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rublePrice = value => value === "Free" ? "0 ₽" : value.replace(/\$([\d.]+)\s*\/\s*(.*)/, (_, amount, unit) =>
+  rubleNumber.format(Number(amount) * USD_RUB) + " ₽/" + unit);
+const PRICE_NOTE = "Цены в рублях по курсу ЦБ на 10.10.2026: 84,9048 ₽ за $1. M — миллион токенов. Cache Write — запись на 5 минут. Claude Haiku 5.5 — для запросов до 100K токенов.";
+
 const MODELS = [
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-haiku-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.10/M", "inp": 0.1, "output": "$0.50/M", "cacheRead": "$0.01/M", "cacheWrite": "$0.125/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
+  {"mark": "MI", "prov": "mistral", "name": "mistral/mistral-large-4", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.68/M", "inp": 0.68, "output": "$2.09/M", "cacheRead": "$0.07/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6.1-sol", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.10/M", "cacheWrite": "$2.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6-astra", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$10/M", "inp": 10.0, "output": "$50/M", "cacheRead": "$1/M", "cacheWrite": "$12.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-opus-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$4/M", "inp": 4.0, "output": "$20/M", "cacheRead": "$0.20/M", "cacheWrite": "$5/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-fable-5.1", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$10/M", "inp": 10.0, "output": "$50/M", "cacheRead": "$0.25/M", "cacheWrite": "$12.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-sonnet-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.10/M", "cacheWrite": "$2.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
   { mark: "XA", prov: "xai", name: "xai/grok-imagine-image-2.0", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "—", inp: 99, output: "$0.05/img", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Image"] },
   { mark: "BD", prov: "bytedance", name: "bytedance/seedance-2.5", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "—", inp: 99, output: "$10.70/M", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Video"] },
   { mark: "IL", prov: "inclusionai", name: "inclusionai/ling-3.0-tiny-free", context: "256K", latency: "0.9s", lat: 0.9, throughput: "364tps", tps: 364, input: "Free", inp: 0, output: "Free", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
@@ -26,8 +44,6 @@ const MODELS = [
   { mark: "AL", prov: "alibaba", name: "alibaba/qwen3.7-flash", context: "991K", latency: "1.8s", lat: 1.8, throughput: "135tps", tps: 135, input: "$0.03/M", inp: 0.03, output: "$0.13/M", cacheRead: "$0.01/M", cacheWrite: "$0.04/M", web: "—", webSub: "", mods: ["Text", "Code"] },
   { mark: "FA", prov: "fishaudio", name: "fish-audio/s2.1-pro", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "$15/M chars", inp: 99, output: "—", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Audio"] },
   { mark: "MS", prov: "moonshotai", name: "moonshotai/kimi-k3-fast", context: "1M", latency: "1.0s", lat: 1.0, throughput: "101tps", tps: 101, input: "$4.50/M", inp: 4.5, output: "$22.50/M", cacheRead: "$0.45/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "AN", prov: "anthropic", name: "anthropic/claude-opus-5", context: "1M", latency: "2.6s", lat: 2.6, throughput: "93tps", tps: 93, input: "$5/M", inp: 5, output: "$25/M", cacheRead: "$0.5/M", cacheWrite: "$6.25/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
-  { mark: "AN", prov: "anthropic", name: "anthropic/claude-opus-5-fast", context: "1M", latency: "1.6s", lat: 1.6, throughput: "219tps", tps: 219, input: "$10/M", inp: 10, output: "$50/M", cacheRead: "$0.5/M", cacheWrite: "$6.25/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
   { mark: "GO", prov: "google", name: "google/gemini-3.5-flash-lite", context: "1M", latency: "0.3s", lat: 0.3, throughput: "360tps", tps: 360, input: "$0.30/M", inp: 0.3, output: "$2.50/M", cacheRead: "$0.03/M", cacheWrite: "—", web: "$14/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
   { mark: "PS", prov: "poolside", name: "poolside/laguna-s-2.1", context: "1M", latency: "0.2s", lat: 0.2, throughput: "199tps", tps: 199, input: "$0.10/M", inp: 0.1, output: "$0.20/M", cacheRead: "$0.01/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
   { mark: "GO", prov: "google", name: "google/gemini-3.6-flash", context: "1M", latency: "1.8s", lat: 1.8, throughput: "172tps", tps: 172, input: "$1.50/M", inp: 1.5, output: "$7.50/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "$14/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
@@ -37,14 +53,12 @@ const MODELS = [
   { mark: "KW", prov: "kwaipilot", name: "kwaipilot/kat-coder-pro-v2.5", context: "256K", latency: "1.1s", lat: 1.1, throughput: "105tps", tps: 105, input: "$0.74/M", inp: 0.74, output: "$2.96/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Code"] },
   { mark: "KW", prov: "kwaipilot", name: "kwaipilot/kat-coder-air-v2.5", context: "256K", latency: "0.7s", lat: 0.7, throughput: "366tps", tps: 366, input: "$0.15/M", inp: 0.15, output: "$0.60/M", cacheRead: "$0.03/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Code"] },
   { mark: "OA", prov: "openai", name: "openai/gpt-5.6-luna", context: "1.1M", latency: "1.8s", lat: 1.8, throughput: "179tps", tps: 179, input: "$1/M", inp: 1, output: "$6/M", cacheRead: "$0.1/M", cacheWrite: "$1.25/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
-  { mark: "OA", prov: "openai", name: "openai/gpt-5.6-sol", context: "1.1M", latency: "2.9s", lat: 2.9, throughput: "126tps", tps: 126, input: "$5/M", inp: 5, output: "$30/M", cacheRead: "$0.5/M", cacheWrite: "$6.25/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image", "Video"] },
   { mark: "OA", prov: "openai", name: "openai/gpt-5.6-terra", context: "1.1M", latency: "2.7s", lat: 2.7, throughput: "100tps", tps: 100, input: "$2.50/M", inp: 2.5, output: "$15/M", cacheRead: "$0.25/M", cacheWrite: "$3.13/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
   { mark: "ME", prov: "meta", name: "meta/muse-spark-1.1", context: "1M", latency: "3.4s", lat: 3.4, throughput: "165tps", tps: 165, input: "$1.25/M", inp: 1.25, output: "$4.25/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code", "Embedding"] },
   { mark: "XA", prov: "xai", name: "xai/grok-4.5", context: "500K", latency: "1.1s", lat: 1.1, throughput: "137tps", tps: 137, input: "$2/M", inp: 2, output: "$6/M", cacheRead: "$0.5/M", cacheWrite: "—", web: "$5/K", webSub: "", mods: ["Text", "Code", "Image"] },
   { mark: "ME", prov: "meta", name: "meta/muse-spark-1.2-contributor", context: "1M", latency: "3.9s", lat: 3.9, throughput: "142tps", tps: 142, input: "$0.10/M", inp: 0.1, output: "$0.20/M", cacheRead: "$0.0/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
   { mark: "PS", prov: "poolside", name: "poolside/laguna-s-2.1-free", context: "256K", latency: "1.3s", lat: 1.3, throughput: "74tps", tps: 74, input: "Free", inp: 0, output: "Free", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
   { mark: "XA", prov: "xai", name: "xai/grok-voice-think-fast-2.0", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "$4.80/hr", inp: 99, output: "—", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Audio"] },
-  { mark: "AN", prov: "anthropic", name: "anthropic/claude-fable-5", context: "1M", latency: "7.4s", lat: 7.4, throughput: "83tps", tps: 83, input: "$10/M", inp: 10, output: "$50/M", cacheRead: "$1/M", cacheWrite: "$12.5/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] }
 ];
 
 const CATALOG = `quiverai|arrow-1.1|T
@@ -106,6 +120,7 @@ const MODCODE = { T: "Text", C: "Code", I: "Image", V: "Video", A: "Audio", E: "
 
 CATALOG.trim().split("\n").forEach(line => {
   const p = line.split("|");
+  if (MODELS.some(model => model.name === p[0] + "/" + p[1])) return;
   MODELS.push({
     mark: p[0].slice(0, 2).toUpperCase(),
     prov: p[0],
@@ -180,11 +195,26 @@ const DEMOS = [
   }
 ];
 
-const FEATURED = ["moonshotai/kimi-k3", "xai/grok-4.5", "anthropic/claude-fable-5", "openai/gpt-5.6-sol", "meta/muse-spark-1.1", "anthropic/claude-opus-5"];
+const FEATURED = ["anthropic/claude-haiku-5.5", "mistral/mistral-large-4", "openai/gpt-6.1-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1", "anthropic/claude-sonnet-5.5"];
 const SORT_LABELS = { release: "по дате", latency: "по latency", throughput: "по throughput", input: "по цене input" };
 const PROV_LABELS = { all: "Все провайдеры", openai: "OpenAI", anthropic: "Anthropic", google: "Google", meta: "Meta", xai: "xAI", deepseek: "DeepSeek", alibaba: "Alibaba", moonshotai: "Moonshot AI", thinkingmachines: "Thinking Machines", mistral: "Mistral", cohere: "Cohere", bfl: "Black Forest Labs", bytedance: "ByteDance", perplexity: "Perplexity", prodia: "Prodia", quiverai: "QuiverAI", sakana: "Sakana AI", poolside: "Poolside", minimax: "MiniMax", kwaipilot: "Kwaipilot", inclusionai: "InclusionAI", fishaudio: "Fish Audio" };
 
-const POINTS = "0.0,200.5 3.2,200.2 6.3,192.0 9.5,194.4 12.7,192.2 15.9,192.0 19.0,168.4 22.2,187.6 25.4,189.4 28.6,173.3 31.7,165.0 34.9,116.7 38.1,130.6 41.3,129.3 44.4,144.2 47.6,146.7 50.8,151.9 54.0,102.3 57.1,102.2 60.3,99.8 63.5,118.7 66.7,125.1 69.8,91.6 73.0,132.0 76.2,90.6 79.4,77.8 82.5,83.9 85.7,117.2 88.9,103.4 92.1,85.3 95.2,112.8 98.4,100.0 101.6,86.3 104.8,71.7 107.9,93.7 111.1,80.2 114.3,102.5 117.5,73.9 120.6,73.3 123.8,67.4 127.0,63.7 130.2,55.6 133.3,56.1 136.5,80.2 139.7,52.6 142.9,68.9 146.0,46.9 149.2,78.5 152.4,47.9 155.6,69.7 158.7,79.6 161.9,59.4 165.1,76.9 168.3,70.6 171.4,39.0 174.6,65.2 177.8,60.9 181.0,49.1 184.1,43.8 187.3,48.6 190.5,39.7 193.7,46.3 196.8,45.2 200.0,63.6 203.2,56.4 206.3,62.4 209.5,32.9 212.7,29.8 215.9,54.7 219.0,34.4 222.2,54.0 225.4,46.7 228.6,57.8 231.7,58.7 234.9,54.2 238.1,46.8 241.3,40.3 244.4,25.5 247.6,43.3 250.8,44.2 254.0,44.6 257.1,35.7 260.3,41.9 263.5,53.5 266.7,30.9 269.8,40.4 273.0,28.2 276.2,47.4 279.4,32.1 282.5,36.3 285.7,29.2 288.9,32.9 292.1,36.7 295.2,38.4 298.4,43.3 301.6,49.2 304.8,40.1 307.9,34.1 311.1,40.7 314.3,21.6 317.5,25.9 320.6,31.8 323.8,44.9 327.0,22.1 330.2,31.6 333.3,31.2 336.5,43.3 339.7,43.8 342.9,24.8 346.0,28.8 349.2,33.9 352.4,25.8 355.6,29.1 358.7,23.5 361.9,36.5 365.1,41.5 368.3,33.3 371.4,42.6 374.6,22.3 377.8,35.7 381.0,26.9 384.1,31.5 387.3,41.8 390.5,41.2 393.7,30.6 396.8,32.6 400.0,20.9 403.2,42.0 406.3,20.9 409.5,21.2 412.7,28.5 415.9,28.2 419.0,30.4 422.2,31.7 425.4,30.4 428.6,36.6 431.7,36.8 434.9,39.5 438.1,34.2 441.3,19.8 444.4,27.5 447.6,36.2 450.8,26.0 454.0,34.8 457.1,25.9 460.3,22.1 463.5,35.3 466.7,39.3 469.8,29.1 473.0,24.5 476.2,27.1 479.4,35.3 482.5,24.5 485.7,20.9 488.9,36.6 492.1,39.4 495.2,35.1 498.4,36.3 501.6,30.8 504.8,35.0 507.9,24.4 511.1,34.5 514.3,38.5 517.5,35.6 520.6,32.8 523.8,38.6 527.0,23.4 530.2,39.2 533.3,22.3 536.5,37.9 539.7,25.6 542.9,35.4 546.0,24.1 549.2,33.0 552.4,31.8 555.6,28.5 558.7,30.8 561.9,25.8 565.1,25.2 568.3,26.2 571.4,31.1 574.6,32.9 577.8,27.4 581.0,23.9 584.1,21.6 587.3,31.3 590.5,37.6 593.7,37.2 596.8,22.1 600.0,28.3";
+// Preview trace, to be replaced together with the live training data.
+const TRAINING_RUN = [
+  [0, .067], [95, .089], [240, .061], [410, .082], [570, .139],
+  [705, .112], [860, .173], [1020, .164], [1215, .207], [1400, .186],
+  [1595, .232], [1760, .287], [1910, .258], [2140, .309], [2335, .285],
+  [2500, .346], [2690, .398], [2860, .367], [3045, .423], [3270, .411],
+  [3460, .475], [3610, .444], [3825, .503], [4030, .538], [4240, .521],
+  [4395, .573], [4570, .552], [4780, .598], [5025, .637], [5215, .612],
+  [5400, .662], [5590, .651], [5805, .688], [6020, .729], [6260, .703],
+  [6435, .748], [6610, .735], [6790, .772], [7020, .787], [7265, .765],
+  [7430, .806], [7680, .795], [7840, .835], [8050, .818], [8290, .849],
+  [8465, .842], [8630, .873], [8870, .862], [9090, .894], [9280, .907],
+  [9495, .883], [9690, .916], [9840, .905], [10000, .920]
+].map(([step, reward]) => ({ step, reward }));
+const FINAL_REWARD = TRAINING_RUN[TRAINING_RUN.length - 1].reward.toFixed(2);
+const POINTS = TRAINING_RUN.map(({ step, reward }) => `${step / 10000 * 600},${202 - reward * 184}`).join(" ");
 
 const ROUTES = [
   {
@@ -316,25 +346,31 @@ const LEADS = [
 // [question, [label, highlighted, desktop position override], [[mark, name, sub, badge] × 2 (second is active)]]
 const DIAGS = [
   ["Сбой провайдера?", [["основной", 0], ["резерв", 1]],
-    [["AN", "Claude Opus 5", "Anthropic", "сбой"], ["AW", "Claude Opus 5", "Amazon Bedrock", "активен"]]],
+    [["AN", "Claude Opus 5.5", "Anthropic", "сбой"], ["AW", "Claude Opus 5.5", "Amazon Bedrock", "активен"]]],
   ["Стоимость токенов?", [["дешевле", 1, "--x:76px;--y:171px"], ["дороже", 0, "--x:88px;--y:89px"]],
-    [["OA", "GPT-5.6 Sol", "openai/gpt-5.6-sol", "$30.00 / M"], ["DS", "DeepSeek V4 Flash", "deepseek/deepseek-v4-flash", "$0.03 / M"]]],
-  ["Минимальный latency?", [["2.9s", 0], ["0.2s", 1]],
-    [["OA", "GPT-5.6 Sol", "126 tps", "медленнее"], ["TM", "Inkling Small", "607 tps", "быстрее"]]]
+    [["OA", "GPT-6.1 Sol", "openai/gpt-6.1-sol", rublePrice("$10/M")], ["DS", "DeepSeek V4 Flash", "deepseek/deepseek-v4-flash", rublePrice("$0.03/M")]]],
+  ["Минимальный latency?", [["маршрут A", 0], ["маршрут B", 1]],
+    [["OA", "GPT-6.1 Sol", "провайдер A", "медленнее"], ["OA", "GPT-6.1 Sol", "провайдер B", "быстрее"]]]
 ];
 
 const NEWS = [
-  ["9 июля", "Muse Spark 1.1 теперь доступен на Alphy Gateway"],
-  ["9 июля", "GPT 5.6 Sol, Luna и Terra теперь доступны на Alphy Gateway"],
-  ["8 июля", "Grok 4.5 теперь доступен на Alphy Gateway"]
+  ["7 октября", "Claude Haiku 5.5 теперь доступен на Alphy Gateway"],
+  ["6 октября", "Mistral Large 4 теперь доступен на Alphy Gateway"],
+  ["29 сентября", "GPT-6.1 Sol теперь доступен на Alphy Gateway"]
 ];
 
 const MODS = [["All", "Все"], ["Text"], ["Code"], ["Image"], ["Video"], ["Audio"], ["Embedding"]];
 const PROVS = ["all", "openai", "anthropic", "google", "meta", "xai", "deepseek", "alibaba", "moonshotai", "thinkingmachines", "mistral", "cohere", "bfl", "bytedance", "perplexity", "minimax", "poolside", "sakana", "prodia", "quiverai"];
 
 const ENVS = [["arcee-ai/ifeval", "0.1.1", "ARCEE-AI"], ["hud/hud-text-2048", "0.1.1", "HUD"], ["aarush/vf-openbench", "0.1.1", "AARUSH"]];
-const EVALS = [["0.90", "#3FB950"], ["0.34", "#D14E3C"], ["1.23", "#3FB950"], ["0.72", "#B98A2E"], ["0.92", "#3FB950"]];
-const PARAMS = [["max_steps", "10,000"], ["rollouts_per_example", "19"], ["seq_len", "4"], ["batch_size", "65536"], ["max_tokens", "256"], ["learning_rate", "0.00005"]];
+const EVALS = [
+  { answer: [2, 3, 5, 7, 11], score: 0.90 },
+  { answer: [1, 4, 6, 9], score: 0.34 },
+  { answer: [0, 1, 1, 2, 3, 5], score: 0.87 },
+  { answer: [3, 6, 9, 12], score: 0.72 },
+  { answer: [1, 2, 4, 8, 16], score: 0.92 }
+];
+const PARAMS = [["max_steps", "10,000"], ["rollouts_per_example", "19"], ["seq_len", "65,536"], ["batch_size", "4"], ["max_tokens", "256"], ["learning_rate", "0.00005"]];
 
 // [provider, bar width %, value]; the first row is Alphy
 const TPS = [["Alphy", 100, 651], ["Selectel", 93.7, 610], ["Cloud.ru", 73.7, 480], ["SberTech Platform V", 72.7, 473]];
@@ -371,7 +407,7 @@ const brow = ([n, w, v], i) => `<div class="brow${i ? "" : " a"}"><span>${n}</sp
 // The provider prefix gets its own span: inline on desktop, a separate grey line on phones.
 const row = r => {
   const i = r.name.indexOf("/") + 1;
-  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi">${r.input}</span><span class="tv hi po">${r.output}</span><span class="cc"><span>Read:<br>Write:</span><span>${r.cacheRead}<br>${r.cacheWrite}</span></span><span class="wc"><span>${r.web}</span><span>${r.webSub}</span></span></div>`;
+  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi">${rublePrice(r.input)}</span><span class="tv hi po">${rublePrice(r.output)}</span><span class="cc"><span>Read:<br>Write:</span><span>${rublePrice(r.cacheRead)}<br>${rublePrice(r.cacheWrite)}</span></span><span class="wc"><span>${rublePrice(r.web)}</span><span>${r.webSub}</span></span></div>`;
 };
 
 const globe = () => `<svg viewBox="-2 -2 804 404" role="img" aria-label="Animated global delivery network"><defs><linearGradient id="grid-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset=".78" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="hemisphere-mask"><rect x="-4" y="-4" width="808" height="412" fill="url(#grid-fade)"/></mask></defs><g mask="url(#hemisphere-mask)"><g class="grid">${map(GRID, d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<g mask="url(#hemisphere-mask)"><path class="packet" d="${r.d}" stroke="url(#${r.id}-gradient)"/><defs><radialGradient class="pg" id="${r.id}-gradient" cx="100" cy="100" r="0" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="0.4"/><stop offset="1" stop-opacity="0"/></radialGradient></defs></g>`)}</g>${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
@@ -475,23 +511,23 @@ const page = () => `
 </section>
 
 <section id="api" class="wrap st">
-<div class="g3 news">${map(NEWS, ([d, t]) => `<article><div class="nd"><span>${d}</span><span>ChangeLog</span></div><div class="nt">${t}</div></article>`)}</div>
-<h2 class="h2c">Один API, сотни моделей</h2>
+<div class="g3 news">${map(NEWS, ([d, t]) => `<article><div class="nd"><span>${d}</span><span>Changelog</span></div><div class="nt">${t}</div></article>`)}</div>
+<h2 class="h2c">Один API для всех моделей</h2>
 <div class="tbl" id="tbl">
 <div class="tbar">
 <div class="seg s2 xs">${map(MODS, ([k, t], i) => `<button data-mod="${k}"${i ? "" : ' class="on"'}>${t || k}</button>`)}</div>
 <div class="dd"><button class="ddb" data-menu-btn="prov"><span id="provlabel">Все провайдеры</span>${CHEV}</button><div class="ddm sc" data-menu="prov">${map(PROVS, (k, i) => `<button data-prov="${k}"${i ? "" : ' class="on"'}>${PROV_LABELS[k]}</button>`)}</div></div>
 <div class="filters">
 <div class="dd"><button class="ddb" data-menu-btn="sort"><span class="dim">Сортировка</span><span id="sortlabel">по дате</span>${CHEV}</button><div class="ddm r" data-menu="sort">${map(Object.keys(SORT_LABELS), (k, i) => `<button data-sort="${k}"${i ? "" : ' class="on"'}>${SORT_LABELS[k]}</button>`)}</div></div>
-<div class="dd"><button class="ddb" data-menu-btn="cols"><span>Колонки</span><span class="dim" id="colcount">(14)</span>${CHEV}</button><div class="ddm r" data-menu="cols"><button class="ck" data-col="cache"><span class="box">✓</span>Cache</button><button class="ck" data-col="web"><span class="box">✓</span>Web Search</button></div></div>
+<div class="dd"><button class="ddb" data-menu-btn="cols"><span>Колонки</span><span class="dim" id="colcount">(8)</span>${CHEV}</button><div class="ddm r" data-menu="cols"><button class="ck" data-col="cache"><span class="box">✓</span>Cache</button><button class="ck" data-col="web"><span class="box">✓</span>Web Search</button></div></div>
 </div>
 </div>
 <div class="srch"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="#4A4A4A" stroke-width="1.3"/><path d="m10.6 10.6 3 3" stroke="#4A4A4A" stroke-width="1.3" stroke-linecap="square"/></svg><input id="search" type="text" placeholder="Поиск модели..." autocomplete="off"></div>
 <div class="tsc xs"><div class="tmin">
-<div class="th"><span>Модель</span><span class="r">Context</span><span class="r">Latency</span><span class="r">Throughput</span><span class="r">Input</span><span class="r" style="padding-right:18px">Output</span><span class="cc">Cache</span><span class="wc">Web Search</span></div>
+<div class="th"><span>Модель</span><span class="r">Context</span><span class="r">Latency</span><span class="r">Throughput</span><span class="r" title="${PRICE_NOTE}">Input · ₽</span><span class="r" title="${PRICE_NOTE}" style="padding-right:18px">Output · ₽</span><span class="cc">Cache</span><span class="wc">Web Search</span></div>
 <div id="tbody"></div>
 </div></div>
-<div class="tfoot"><span id="count"></span><span>прокрутите список ↓</span></div>
+<div class="tfoot"><span id="count"></span><span title="${PRICE_NOTE}">Цены в ₽ · M = 1 млн токенов</span></div>
 </div>
 </section>
 
@@ -503,15 +539,15 @@ const page = () => `
 <span class="dmd"></span><span class="pl"></span><span class="pl"></span>
 <span class="node nx" style="top:8px">INIT</span><span class="node nx" style="top:204px">EVAL</span><span class="node" style="left:0;top:106px">PUSH</span><span class="node" style="right:0;top:106px">DEVELOP</span>
 </div></div>${ct("01", "RL окружение", "Инициализация, разработка, оценка и публикация окружения.")}</div>
-<div class="bb"><div class="viz">
+<div class="bb"><div class="viz eval-viz">
 <div class="envs"><div class="env on"><div>alphy/<b>logic-env</b></div><div class="em"><span>0.2.17</span><span>PRIMEINTELLECT</span></div><div class="evb">Оценить</div></div>${map(ENVS, ([n, v, o]) => `<div class="env"><div>${n}</div><div class="em"><span>${v}</span><span>${o}</span></div></div>`)}</div>
-<div class="evals"><div class="eh"><span>ID</span><span>РЕЗУЛЬТАТ</span><span>ОЦЕНКА</span></div>${map(EVALS, ([s, c], i) => `<div class="er"><span>${i + 1}</span><span>"answer": "[2, 3, 4,…</span><span style="color:${c}">${s}</span></div>`)}</div>
-</div>${ct("02", "Оценки и бенчмарки", "Гибкая оценка производительность моделей")}</div>
+<div class="evals"><div class="eh"><span>ID</span><span>РЕЗУЛЬТАТ</span><span>ОЦЕНКА</span></div>${map(EVALS, ({ answer, score }, i) => `<div class="er"><span>${i + 1}</span><span title='${JSON.stringify({ answer })}'>"answer": ${JSON.stringify(answer)}</span><span>${score.toFixed(2)}</span></div>`)}</div>
+</div>${ct("02", "Оценки и бенчмарки", "Гибкая оценка производительности моделей")}</div>
 <div class="br"><div class="viz trn">
-<div class="rw"><div class="rwh"><span>Награда</span><span id="rv">0.92</span></div>
+<div class="rw"><div class="rwh"><span>Награда</span><span id="rv">${FINAL_REWARD}</span></div>
 <div class="rwb"><div class="ax"><span>1</span><span>0.8</span><span>0.6</span><span>0.4</span><span>0.2</span><span>0</span></div>
 <div class="chart" id="chart"><span id="shade"></span><span id="cur"></span><span id="dot"></span><svg viewBox="0 0 600 210" preserveAspectRatio="none" aria-hidden="true">${map([150, 300, 450], x => `<line x1="${x}" y1="0" x2="${x}" y2="210" stroke="#131313" stroke-width="1" vector-effect="non-scaling-stroke"/>`)}<polyline id="poly" points="${POINTS}" fill="none" stroke="#EDEDED" stroke-width="1" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg></div></div>
-<div class="rwf"><span>0</span><span id="step">step</span><span>10,000</span></div></div>
+<div class="rwf"><span>0</span><span id="step">шаги</span><span>10 000</span></div></div>
 <div class="prm">${map(PARAMS, ([k, v]) => `<div><span>${k}</span><i></i><span>${v}</span></div>`)}</div>
 </div>${ct("03", "Обучение", "Обучение крупных моделей.")}</div>
 <div><div class="viz c ch"><div class="chain">
@@ -524,7 +560,7 @@ const page = () => `
 </section>
 
 <section id="bench" class="wrap st2">
-<div class="g2 bh"><h2>Скорость через API</h2><div style="padding-bottom:4px"><p>Qwen 3.8 27B-A3B, text-only, 4k input → 512 output. Независимый замер MLX:&nbsp;<a href="https://www.yukon.org/mlxfast" target="_blank" rel="noreferrer">yukon.org/mlxfast</a>.</p></div></div>
+<div class="g2 bh"><h2>Скорость через API</h2><div style="padding-bottom:4px"><p>Qwen 3.8 27B-A3B, text-only, 4k input → 512 output. Бенчмарки:&nbsp;<a href="https://yukon.org/" target="_blank" rel="noreferrer">yukon.org</a>.</p></div></div>
 <div class="g2 bgrid">
 <div class="bc br"><div class="bct"><div class="k">TOKENS / SEC</div><div>больше — лучше</div></div><div class="brs">${map(TPS, brow)}</div><div class="bf">+6,7% к ближайшему результату</div></div>
 <div class="bc"><div class="bct"><div class="k">TTFT, МС</div><div>меньше — лучше</div></div><div class="brs">${map(TTFT, brow)}</div><div class="bf">в 2,3 раза быстрее отклик, чем у Selectel</div></div>
@@ -550,7 +586,7 @@ ${barsSection()}
 <div class="ml"><div class="logo">alphy</div><h2>Поговорите<br>с нашей командой</h2>
 <div class="mi"><span>01</span><p><b>Кастомное демо.</b> Покажем возможности Alphy на ваших сценариях и подберём гибкие условия.</p></div>
 <div class="mi"><span>02</span><p><b>Доступ к Gateway.</b>&nbsp;Ключи и лимиты под вашу нагрузку.</p></div>
-<div class="ms"><div><div>324</div><div>моделей в Gateway</div></div><div><div>13</div><div>юрисдикций</div></div></div>
+<div class="ms"><div><div>${MODELS.length}</div><div>моделей в Gateway</div></div><div><div>13</div><div>юрисдикций</div></div></div>
 </div>
 <div class="mr"><div class="fm">
 <div><label for="f-mail">Рабочая почта</label><input class="in" id="f-mail" type="email" placeholder="name@company.com"></div>
@@ -982,16 +1018,16 @@ function bindChart() {
     dot.style.top = best[1] / 210 * 100 + "%";
     cur.style.opacity = dot.style.opacity = "1";
     shade.style.opacity = "0.72";
-    const v = Math.max(0, Math.min(1.02, (202 - best[1]) / 184));
+    const v = Math.max(0, Math.min(1, (202 - best[1]) / 184));
     val.textContent = v.toFixed(2);
-    val.style.color = v >= 0.7 ? "#3FB950" : v >= 0.4 ? "#B98A2E" : "#D14E3C";
-    step.textContent = Math.round(best[0] / 600 * 10000).toLocaleString("ru-RU") + " step";
+    val.style.color = "#EDEDED";
+    step.textContent = "шаг " + Math.round(best[0] / 600 * 10000).toLocaleString("ru-RU");
   });
   chart.addEventListener("mouseleave", () => {
     cur.style.opacity = dot.style.opacity = shade.style.opacity = "0";
-    val.textContent = "0.92";
-    val.style.color = "#3FB950";
-    step.textContent = "step";
+    val.textContent = FINAL_REWARD;
+    val.style.color = "#EDEDED";
+    step.textContent = "шаги";
   });
 }
 
@@ -1014,7 +1050,7 @@ function renderRows() {
     rows.sort((a, b) => idx(a) - idx(b));
   }
   $("tbody").innerHTML = rows.length ? map(rows, row) : '<div class="none">Ничего не найдено</div>';
-  $("count").textContent = rows.length + " моделей в выборке · всего 324 в Gateway";
+  $("count").textContent = "Моделей: " + rows.length + (rows.length === MODELS.length ? "" : " из " + MODELS.length);
 }
 
 // Hidden columns are classes on the table (.nc — no cache, .nw — no web search); CSS picks the grid template.
@@ -1024,7 +1060,7 @@ function toggleCol(key, btn) {
   $("tbl").classList.toggle(key === "cache" ? "nc" : "nw", !cols[key]);
   box.classList.toggle("off", !cols[key]);
   box.textContent = cols[key] ? "✓" : "";
-  $("colcount").textContent = "(" + (12 + cols.cache + cols.web) + ")";
+  $("colcount").textContent = "(" + (6 + cols.cache + cols.web) + ")";
 }
 
 const closeMenus = () => $$(".ddm").forEach(m => m.classList.remove("open"));
