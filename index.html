@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>alphy — самый быстрый ML инференс в СНГ</title>
+<meta name="description" content="Мгновенный доступ к передовым моделям. Инфраструктура обучения, развёртывания и постобучения.">
+<meta property="og:title" content="alphy — самый быстрый ML инференс в СНГ">
+<meta property="og:description" content="Мгновенный доступ к передовым моделям. Инфраструктура обучения, развёртывания и постобучения.">
+<meta name="theme-color" content="#000">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' fill='%23EDEDED' font-family='monospace' font-size='22' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Geist+Mono:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>html,body{margin:0;background:#000}</style>
+<script>
+// Static site lives on jsDelivr (github.com/nanohit/alphy_web, tag below); locally it is read from ./cdn/.
+(function (d, tag) {
+  var local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),
+      base = local ? "cdn/" : "https://cdn.jsdelivr.net/gh/nanohit/alphy_web@" + tag + "/cdn/",
+      min = local ? "" : ".min",
+      css = d.createElement("link"), js = d.createElement("script");
+  css.rel = "stylesheet"; css.id = "alphy-css"; css.href = base + "alphy" + min + ".css";
+  js.src = base + "alphy" + min + ".js";
+  d.head.append(css, js);
+})(document, "1.0.0");
+</script>
+</head>
+<body><noscript>alphy — самый быстрый ML инференс в СНГ. Для работы сайта нужен JavaScript.</noscript></body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.alphy.chat" }],
+      "destination": "https://alphy.chat/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "room", "value": "(?<room>.*)" }],
+      "destination": "https://chat.alphy.chat/?room=:room",
+      "permanent": false
+    },
+    { "source": "/room/:id(\\d{4})", "destination": "https://chat.alphy.chat/:id", "permanent": true },
+    { "source": "/:id(\\d{4})", "destination": "https://chat.alphy.chat/:id", "permanent": true },
+    { "source": "/:path+", "destination": "https://chat.alphy.chat/:path+", "permanent": false }
+  ],
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}

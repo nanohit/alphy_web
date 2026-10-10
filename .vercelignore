@@ -1,0 +1,4 @@
+# Vercel only serves the bootstrap; everything in cdn/ is served by jsDelivr from GitHub.
+/*
+!index.html
+!vercel.json
