@@ -611,7 +611,7 @@ ${activitySection()}
 
 <div class="site-ending">
 <div class="globe" aria-hidden="true">${globe()}</div>
-<section id="power" class="power" aria-label="Связаться с Alphy"><div class="power-actions">
+<section id="power" class="power" aria-labelledby="power-h"><h2 id="power-h">Начать работу</h2><div class="power-actions">
 <button class="bw lg" data-act="contact">Связаться</button><button class="bo lg" data-act="login">Войти</button>
 </div></section>
 
@@ -1359,14 +1359,14 @@ function bindActivity() {
   const changeColors = () => {
     board.classList.add("is-changing");
     board.classList.remove("is-intro");
-    setTimeout(finishIntro, reduced.matches ? 200 : 750);
+    setTimeout(finishIntro, reduced.matches ? 200 : 1650);
   };
   // One observation and two timers. Cells never move; CSS changes their colors once.
   const observer = new IntersectionObserver(entries => {
     if (started || !entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .6)) return;
     started = true;
     observer.disconnect();
-    setTimeout(changeColors, 1800);
+    setTimeout(changeColors, 2200);
   }, { threshold: .6 });
   observer.observe(board);
 
