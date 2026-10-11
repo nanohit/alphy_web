@@ -10,127 +10,67 @@ const BASE = ((document.currentScript || {}).src || "").replace(/[^/]*$/, "");
 const API_ENDPOINT = "";       // POST {prompt, stream:false} → the panel shows the answer; empty → Groq
 const SHOW_DEMO_ANSWER = true; // false → the panel starts with the "API не подключён" notice
 
-/* ---------- data (verbatim from the design) ---------- */
+/* ---------- catalog and presentation data ---------- */
 
 // Pricing sources (checked 2026-10-11):
 // developers.openai.com/api/docs/models/{gpt-6.1-sol,gpt-6-astra}
 // platform.claude.com/docs/en/about-claude/pricing (5-minute cache writes)
 // docs.mistral.ai/models/mistral-large (current public-preview prices)
+// Other text models: openrouter.ai/api/v1/models; media: docs.x.ai and docs.bfl.ai.
 // Claude Haiku prices below apply to prompts up to 100K tokens.
 const USD_RUB = 84.9048; // CBR USD rate for 2026-10-10, effective on 2026-10-11.
 const rubleNumber = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const rublePrice = value => value === "Free" ? "0 ₽" : value.replace(/\$([\d.]+)\s*\/\s*(.*)/, (_, amount, unit) =>
   rubleNumber.format(Number(amount) * USD_RUB) + " ₽/" + unit);
-const PRICE_NOTE = "Цены в рублях по курсу ЦБ на 10.10.2026: 84,9048 ₽ за $1. M — миллион токенов. Cache Write — запись на 5 минут. Claude Haiku 5.5 — для запросов до 100K токенов.";
+const PRICE_NOTE = "Публичные тарифы на 11.10.2026, в рублях по курсу ЦБ на 10.10.2026: 84,9048 ₽ за $1. M — миллион токенов, K — тысяча запросов. Указаны базовые режимы; «от» — минимальная ставка. Cache Write — запись на 5 минут, где она тарифицируется отдельно.";
 
+// Curated public pricing snapshot, checked 2026-10-11. Sources/conditions are stored per model.
 const MODELS = [
-  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-haiku-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.10/M", "inp": 0.1, "output": "$0.50/M", "cacheRead": "$0.01/M", "cacheWrite": "$0.125/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  {"mark": "MI", "prov": "mistral", "name": "mistral/mistral-large-4", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.68/M", "inp": 0.68, "output": "$2.09/M", "cacheRead": "$0.07/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6.1-sol", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.10/M", "cacheWrite": "$2.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6-astra", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$10/M", "inp": 10.0, "output": "$50/M", "cacheRead": "$1/M", "cacheWrite": "$12.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-opus-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$4/M", "inp": 4.0, "output": "$20/M", "cacheRead": "$0.20/M", "cacheWrite": "$5/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-fable-5.1", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$10/M", "inp": 10.0, "output": "$50/M", "cacheRead": "$0.25/M", "cacheWrite": "$12.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-sonnet-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.10/M", "cacheWrite": "$2.50/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"]},
-  { mark: "XA", prov: "xai", name: "xai/grok-imagine-image-2.0", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "—", inp: 99, output: "$0.05/img", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Image"] },
-  { mark: "BD", prov: "bytedance", name: "bytedance/seedance-2.5", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "—", inp: 99, output: "$10.70/M", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Video"] },
-  { mark: "IL", prov: "inclusionai", name: "inclusionai/ling-3.0-tiny-free", context: "256K", latency: "0.9s", lat: 0.9, throughput: "364tps", tps: 364, input: "Free", inp: 0, output: "Free", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "IL", prov: "inclusionai", name: "inclusionai/ling-3.0-flash", context: "256K", latency: "0.8s", lat: 0.8, throughput: "319tps", tps: 319, input: "$0.06/M", inp: 0.06, output: "$0.18/M", cacheRead: "$0.01/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "ME", prov: "meta", name: "meta/muse-spark-1.2", context: "1M", latency: "3.8s", lat: 3.8, throughput: "210tps", tps: 210, input: "$1.25/M", inp: 1.25, output: "$4.25/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code", "Image"] },
-  { mark: "BF", prov: "bfl", name: "bfl/flux-3-video", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "—", inp: 99, output: "$0.06/sec", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Video"] },
-  { mark: "AL", prov: "alibaba", name: "alibaba/qwen3.8-max", context: "1M", latency: "4.0s", lat: 4.0, throughput: "56tps", tps: 56, input: "$2/M", inp: 2, output: "$6/M", cacheRead: "$0.25/M", cacheWrite: "$2.5/M", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "DS", prov: "deepseek", name: "deepseek/deepseek-v4-flash", context: "1M", latency: "0.8s", lat: 0.8, throughput: "399tps", tps: 399, input: "$0.01/M", inp: 0.01, output: "$0.03/M", cacheRead: "$0.0/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "TM", prov: "thinkingmachines", name: "thinkingmachines/inkling-small", context: "1M", latency: "0.2s", lat: 0.2, throughput: "607tps", tps: 607, input: "$0.50/M", inp: 0.5, output: "$1.20/M", cacheRead: "$0.1/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "MM", prov: "minimax", name: "minimax/minimax-h3", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "$0.04/img", inp: 99, output: "$0.13/sec", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Image", "Video"] },
-  { mark: "AL", prov: "alibaba", name: "alibaba/qwen3.7-flash", context: "991K", latency: "1.8s", lat: 1.8, throughput: "135tps", tps: 135, input: "$0.03/M", inp: 0.03, output: "$0.13/M", cacheRead: "$0.01/M", cacheWrite: "$0.04/M", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "FA", prov: "fishaudio", name: "fish-audio/s2.1-pro", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "$15/M chars", inp: 99, output: "—", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Audio"] },
-  { mark: "MS", prov: "moonshotai", name: "moonshotai/kimi-k3-fast", context: "1M", latency: "1.0s", lat: 1.0, throughput: "101tps", tps: 101, input: "$4.50/M", inp: 4.5, output: "$22.50/M", cacheRead: "$0.45/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "GO", prov: "google", name: "google/gemini-3.5-flash-lite", context: "1M", latency: "0.3s", lat: 0.3, throughput: "360tps", tps: 360, input: "$0.30/M", inp: 0.3, output: "$2.50/M", cacheRead: "$0.03/M", cacheWrite: "—", web: "$14/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
-  { mark: "PS", prov: "poolside", name: "poolside/laguna-s-2.1", context: "1M", latency: "0.2s", lat: 0.2, throughput: "199tps", tps: 199, input: "$0.10/M", inp: 0.1, output: "$0.20/M", cacheRead: "$0.01/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "GO", prov: "google", name: "google/gemini-3.6-flash", context: "1M", latency: "1.8s", lat: 1.8, throughput: "172tps", tps: 172, input: "$1.50/M", inp: 1.5, output: "$7.50/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "$14/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
-  { mark: "MS", prov: "moonshotai", name: "moonshotai/kimi-k3", context: "1M", latency: "1.0s", lat: 1.0, throughput: "91tps", tps: 91, input: "$2.90/M", inp: 2.9, output: "$14/M", cacheRead: "$0.29/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "TM", prov: "thinkingmachines", name: "thinkingmachines/inkling", context: "256K", latency: "0.2s", lat: 0.2, throughput: "234tps", tps: 234, input: "$1/M", inp: 1, output: "$4.05/M", cacheRead: "$0.17/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code", "Embedding"] },
-  { mark: "BD", prov: "bytedance", name: "bytedance/seedream-5.0-pro", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "$0.003/M", inp: 99, output: "$0.04/img", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Image"] },
-  { mark: "KW", prov: "kwaipilot", name: "kwaipilot/kat-coder-pro-v2.5", context: "256K", latency: "1.1s", lat: 1.1, throughput: "105tps", tps: 105, input: "$0.74/M", inp: 0.74, output: "$2.96/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Code"] },
-  { mark: "KW", prov: "kwaipilot", name: "kwaipilot/kat-coder-air-v2.5", context: "256K", latency: "0.7s", lat: 0.7, throughput: "366tps", tps: 366, input: "$0.15/M", inp: 0.15, output: "$0.60/M", cacheRead: "$0.03/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Code"] },
-  { mark: "OA", prov: "openai", name: "openai/gpt-5.6-luna", context: "1.1M", latency: "1.8s", lat: 1.8, throughput: "179tps", tps: 179, input: "$1/M", inp: 1, output: "$6/M", cacheRead: "$0.1/M", cacheWrite: "$1.25/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
-  { mark: "OA", prov: "openai", name: "openai/gpt-5.6-terra", context: "1.1M", latency: "2.7s", lat: 2.7, throughput: "100tps", tps: 100, input: "$2.50/M", inp: 2.5, output: "$15/M", cacheRead: "$0.25/M", cacheWrite: "$3.13/M", web: "$10/K", webSub: "+ стоимость input", mods: ["Text", "Code", "Image"] },
-  { mark: "ME", prov: "meta", name: "meta/muse-spark-1.1", context: "1M", latency: "3.4s", lat: 3.4, throughput: "165tps", tps: 165, input: "$1.25/M", inp: 1.25, output: "$4.25/M", cacheRead: "$0.15/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code", "Embedding"] },
-  { mark: "XA", prov: "xai", name: "xai/grok-4.5", context: "500K", latency: "1.1s", lat: 1.1, throughput: "137tps", tps: 137, input: "$2/M", inp: 2, output: "$6/M", cacheRead: "$0.5/M", cacheWrite: "—", web: "$5/K", webSub: "", mods: ["Text", "Code", "Image"] },
-  { mark: "ME", prov: "meta", name: "meta/muse-spark-1.2-contributor", context: "1M", latency: "3.9s", lat: 3.9, throughput: "142tps", tps: 142, input: "$0.10/M", inp: 0.1, output: "$0.20/M", cacheRead: "$0.0/M", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "PS", prov: "poolside", name: "poolside/laguna-s-2.1-free", context: "256K", latency: "1.3s", lat: 1.3, throughput: "74tps", tps: 74, input: "Free", inp: 0, output: "Free", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Text", "Code"] },
-  { mark: "XA", prov: "xai", name: "xai/grok-voice-think-fast-2.0", context: "—", latency: "—", lat: 99, throughput: "—", tps: 0, input: "$4.80/hr", inp: 99, output: "—", cacheRead: "—", cacheWrite: "—", web: "—", webSub: "", mods: ["Audio"] },
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-haiku-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.1/M", "inp": 0.1, "output": "$0.5/M", "cacheRead": "$0.01/M", "cacheWrite": "$0.125/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 100 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "MI", "prov": "mistral", "name": "mistral/mistral-large-4", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.68/M", "inp": 0.68, "output": "$2.09/M", "cacheRead": "$0.07/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6.1-sol", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.1/M", "cacheWrite": "$2.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 272 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6-astra", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$10/M", "inp": 10.0, "output": "$50/M", "cacheRead": "$1/M", "cacheWrite": "$12.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 272 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-opus-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$4/M", "inp": 4.0, "output": "$20/M", "cacheRead": "$0.2/M", "cacheWrite": "$5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-fable-5.1", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$10/M", "inp": 10.0, "output": "$50/M", "cacheRead": "$0.25/M", "cacheWrite": "$12.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-sonnet-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.1/M", "cacheWrite": "$2.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-3.6-flash", "context": "1M", "latency": "1.8s", "lat": 1.8, "throughput": "172tps", "tps": 172, "input": "$0.75/M", "inp": 0.75, "output": "$3.75/M", "cacheRead": "$0.075/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-3.5-flash-lite", "context": "1M", "latency": "0.3s", "lat": 0.3, "throughput": "360tps", "tps": 360, "input": "$0.3/M", "inp": 0.3, "output": "$2.5/M", "cacheRead": "$0.03/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-3.5-flash", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$1.5/M", "inp": 1.5, "output": "$9/M", "cacheRead": "$0.15/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "DS", "prov": "deepseek", "name": "deepseek/deepseek-v4.1-flash", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "от $0.15/M", "inp": 0.15, "output": "от $0.6/M", "cacheRead": "от $0.003/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://api-docs.deepseek.com/quick_start/pricing/", "priceNote": "Off-peak тариф; в часы пик input, output и cache read стоят вдвое дороже."},
+  {"mark": "DS", "prov": "deepseek", "name": "deepseek/deepseek-v4-pro", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "от $0.66/M", "inp": 0.66, "output": "от $1.98/M", "cacheRead": "от $0.022/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code"], "priceSource": "https://api-docs.deepseek.com/quick_start/pricing/", "priceNote": "Off-peak тариф; в часы пик input, output и cache read стоят вдвое дороже."},
+  {"mark": "AL", "prov": "alibaba", "name": "alibaba/qwen3.8-max", "context": "1M", "latency": "4.0s", "lat": 4, "throughput": "56tps", "tps": 56, "input": "$2/M", "inp": 2.0, "output": "$6/M", "cacheRead": "$0.25/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AL", "prov": "alibaba", "name": "alibaba/qwen3.7-flash", "context": "1M", "latency": "1.8s", "lat": 1.8, "throughput": "135tps", "tps": 135, "input": "$0.03/M", "inp": 0.03, "output": "$0.13/M", "cacheRead": "$0.006/M", "cacheWrite": "$0.038/M", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 32 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "MS", "prov": "moonshotai", "name": "moonshotai/kimi-k3", "context": "1M", "latency": "1.0s", "lat": 1, "throughput": "91tps", "tps": 91, "input": "$0.8/M", "inp": 0.8, "output": "$15/M", "cacheRead": "$0.55/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "MS", "prov": "moonshotai", "name": "moonshotai/kimi-k2.6", "context": "256K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.65/M", "inp": 0.65, "output": "$3.41/M", "cacheRead": "$0.15/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "XA", "prov": "xai", "name": "xai/grok-4.5", "context": "488K", "latency": "1.1s", "lat": 1.1, "throughput": "137tps", "tps": 137, "input": "$2/M", "inp": 2.0, "output": "$6/M", "cacheRead": "$0.3/M", "cacheWrite": "—", "web": "$5/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 200 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-5.6-terra", "context": "1.05M", "latency": "2.7s", "lat": 2.7, "throughput": "100tps", "tps": 100, "input": "$2/M", "inp": 2.0, "output": "$12/M", "cacheRead": "$0.2/M", "cacheWrite": "$2.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 272 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-5.6-luna", "context": "1.05M", "latency": "1.8s", "lat": 1.8, "throughput": "179tps", "tps": 179, "input": "$0.2/M", "inp": 0.2, "output": "$1.2/M", "cacheRead": "$0.02/M", "cacheWrite": "$0.25/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 272 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-opus-4.8", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$5/M", "inp": 5.0, "output": "$25/M", "cacheRead": "$0.5/M", "cacheWrite": "$6.25/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-opus-4.7", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$5/M", "inp": 5.0, "output": "$25/M", "cacheRead": "$0.5/M", "cacheWrite": "$6.25/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-sonnet-5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.2/M", "cacheWrite": "$2.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-sonnet-4.6", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$3/M", "inp": 3.0, "output": "$15/M", "cacheRead": "$0.3/M", "cacheWrite": "$3.75/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-haiku-4.5", "context": "195K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$1/M", "inp": 1.0, "output": "$5/M", "cacheRead": "$0.1/M", "cacheWrite": "$1.25/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-3.1-pro-preview", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$12/M", "cacheRead": "$0.2/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 200 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-3.1-flash-lite", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.25/M", "inp": 0.25, "output": "$1.5/M", "cacheRead": "$0.025/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-2.5-pro", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$1.25/M", "inp": 1.25, "output": "$10/M", "cacheRead": "$0.125/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 200 000 токенов; длинный контекст оплачивается по другой ставке."},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-2.5-flash", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.3/M", "inp": 0.3, "output": "$2.5/M", "cacheRead": "$0.03/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "GO", "prov": "google", "name": "google/gemini-2.5-flash-lite", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.1/M", "inp": 0.1, "output": "$0.4/M", "cacheRead": "$0.01/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "DS", "prov": "deepseek", "name": "deepseek/deepseek-v3.2", "context": "160K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.259/M", "inp": 0.259, "output": "$0.8/M", "cacheRead": "$0.14/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "DS", "prov": "deepseek", "name": "deepseek/deepseek-r1", "context": "62K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.7/M", "inp": 0.7, "output": "$2.5/M", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "MI", "prov": "mistral", "name": "mistral/mistral-medium-3.5", "context": "256K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$1.5/M", "inp": 1.5, "output": "$7.5/M", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "MI", "prov": "mistral", "name": "mistral/devstral-2", "context": "256K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.4/M", "inp": 0.4, "output": "$2/M", "cacheRead": "$0.04/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "MI", "prov": "mistral", "name": "mistral/codestral", "context": "250K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.3/M", "inp": 0.3, "output": "$0.9/M", "cacheRead": "$0.03/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "CO", "prov": "cohere", "name": "cohere/command-a", "context": "250K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2.5/M", "inp": 2.5, "output": "$10/M", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code"], "priceSource": "https://openrouter.ai/api/v1/models"},
+  {"mark": "MI", "prov": "mistral", "name": "mistral/codestral-embed", "context": "8K", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.15/M", "inp": 0.15, "output": "Включено", "cacheRead": "$0.015/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Embedding"], "priceSource": "https://docs.mistral.ai/inference/pricing", "priceNote": "Оплачиваются входные токены; выходной вектор включён в тариф."},
+  {"mark": "XA", "prov": "xai", "name": "xai/grok-imagine-image-2.0", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.01/img", "inp": 99, "output": "от $0.04/img", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Image"], "priceSource": "https://docs.x.ai/developers/pricing", "priceNote": "Выход: 1K, Low quality. Цена растёт с разрешением и качеством; input — входное изображение."},
+  {"mark": "XA", "prov": "xai", "name": "xai/grok-voice-think-fast-2.0", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.004/text", "inp": 99, "output": "$4.80/hr", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Audio"], "priceSource": "https://docs.x.ai/developers/pricing", "priceNote": "Speech-to-speech: 4,80 USD за час; текстовый вход тарифицируется отдельно."},
+  {"mark": "BF", "prov": "bfl", "name": "bfl/flux-2-klein-4b", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "Включено", "inp": 99, "output": "от $0.014/img", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Image"], "priceSource": "https://docs.bfl.ai/quick_start/pricing", "priceNote": "Text-to-image, базовое разрешение; цена зависит от мегапикселей. Входной промпт включён."},
+  {"mark": "BF", "prov": "bfl", "name": "bfl/flux-2-klein-9b", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "Включено", "inp": 99, "output": "от $0.015/img", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Image"], "priceSource": "https://docs.bfl.ai/quick_start/pricing", "priceNote": "Text-to-image, базовое разрешение; цена зависит от мегапикселей. Входной промпт включён."},
+  {"mark": "BF", "prov": "bfl", "name": "bfl/flux-2-pro", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "Включено", "inp": 99, "output": "от $0.03/img", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Image"], "priceSource": "https://docs.bfl.ai/quick_start/pricing", "priceNote": "Text-to-image, базовое разрешение; цена зависит от мегапикселей. Входной промпт включён."},
+  {"mark": "BF", "prov": "bfl", "name": "bfl/flux-2-max", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "Включено", "inp": 99, "output": "от $0.07/img", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Image"], "priceSource": "https://docs.bfl.ai/quick_start/pricing", "priceNote": "Text-to-image, базовое разрешение; цена зависит от мегапикселей. Входной промпт включён."},
+  {"mark": "BF", "prov": "bfl", "name": "bfl/flux-2-flex", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "Включено", "inp": 99, "output": "от $0.05/img", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Image"], "priceSource": "https://docs.bfl.ai/quick_start/pricing", "priceNote": "Text-to-image, базовое разрешение; цена зависит от мегапикселей. Входной промпт включён."},
+  {"mark": "BF", "prov": "bfl", "name": "bfl/flux-3-video", "context": "—", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "Включено", "inp": 99, "output": "от $0.17/sec", "cacheRead": "—", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Video"], "priceSource": "https://docs.bfl.ai/quick_start/pricing", "priceNote": "Полный рендер HD, text/image-to-video. Цена за секунду готового видео; draft — отдельный режим."}
 ];
-
-const CATALOG = `quiverai|arrow-1.1|T
-bytedance|seed-1.8|T,I
-anthropic|claude-3-haiku|T
-anthropic|claude-haiku-4.5|T,C
-anthropic|claude-opus-4|T,C
-anthropic|claude-opus-4.5|T,C,I
-anthropic|claude-opus-4.6|T,C
-anthropic|claude-opus-4.7|T,C
-anthropic|claude-opus-4.8|T,C
-anthropic|claude-sonnet-4|T,C
-anthropic|claude-sonnet-4.5|T,C
-anthropic|claude-sonnet-4.6|T,C
-anthropic|claude-sonnet-5|T,C
-mistral|codestral-embed|E
-cohere|rerank-v3.5|E
-cohere|rerank-v4-fast|E
-cohere|rerank-v4-pro|E
-cohere|command-a|T,C
-deepseek|deepseek-r1|T,C
-deepseek|deepseek-v3|T,C
-deepseek|deepseek-v3.1|T,C
-deepseek|deepseek-v3.1-terminus|T,C
-deepseek|deepseek-v3.2|T,C
-deepseek|deepseek-v3.2-thinking|T,C
-deepseek|deepseek-v4-flash|T,C
-deepseek|deepseek-v4-pro|T,C
-mistral|devstral-2|C
-mistral|devstral-small-2|C
-perplexity|pplx-embed-v1-0.6b|E
-perplexity|pplx-embed-v1-4b|E
-cohere|embed-v4.0|E,I
-prodia|flux-fast-schnell|I
-bfl|flux-pro-1.0-fill|I
-bfl|flux-kontext-max|I
-bfl|flux-kontext-pro|I
-bfl|flux-2-flex|I
-bfl|flux-2-klein-4b|I
-bfl|flux-2-klein-9b|I
-bfl|flux-2-max|I
-bfl|flux-2-pro|I
-bfl|flux-pro-1.1|I
-bfl|flux-pro-1.1-ultra|I
-sakana|fugu-ultra|T
-google|gemini-2.5-flash|T,C,I
-google|gemini-2.5-flash-lite|T,C,I
-google|gemini-2.5-flash-preview-09-2025|T,C,I
-google|gemini-2.5-pro|T,C,I,A
-google|gemini-3-flash|T,C,I
-google|gemini-3.1-flash-image|I
-google|gemini-3.1-flash-image-preview|I
-google|gemini-3.1-flash-lite|T,C,A
-google|gemini-3.1-flash-lite-image|I
-google|gemini-3.1-pro-preview|T,C
-google|gemini-3.5-flash|T,C`;
-
-const MODCODE = { T: "Text", C: "Code", I: "Image", V: "Video", A: "Audio", E: "Embedding" };
-
-CATALOG.trim().split("\n").forEach(line => {
-  const p = line.split("|");
-  if (MODELS.some(model => model.name === p[0] + "/" + p[1])) return;
-  MODELS.push({
-    mark: p[0].slice(0, 2).toUpperCase(),
-    prov: p[0],
-    name: p[0] + "/" + p[1],
-    context: "—", latency: "—", lat: 99, throughput: "—", tps: 0,
-    input: "—", inp: 99, output: "—", cacheRead: "—", cacheWrite: "—",
-    web: "—", webSub: "",
-    mods: p[2].split(",").map(c => MODCODE[c])
-  });
-});
 
 // Stored reversed so secret scanners don't flag these intentionally public demo keys.
 const GROQ_KEYS = [
@@ -360,9 +300,9 @@ const NEWS = [
 ];
 
 const MODS = [["All", "Все"], ["Text"], ["Code"], ["Image"], ["Video"], ["Audio"], ["Embedding"]];
-const PROVS = ["all", "openai", "anthropic", "google", "meta", "xai", "deepseek", "alibaba", "moonshotai", "thinkingmachines", "mistral", "cohere", "bfl", "bytedance", "perplexity", "minimax", "poolside", "sakana", "prodia", "quiverai"];
+const PROVS = ["all", ...Object.keys(PROV_LABELS).filter(prov => MODELS.some(model => model.prov === prov))];
 
-const ENVS = [["arcee-ai/ifeval", "0.1.1", "ARCEE-AI"], ["hud/hud-text-2048", "0.1.1", "HUD"], ["aarush/vf-openbench", "0.1.1", "AARUSH"]];
+const ENVS = [["alphy/instruction-env", "0.3.4", "ALPHY"], ["alphy/tool-env", "0.1.8", "ALPHY"], ["alphy/code-env", "0.2.6", "ALPHY"]];
 const EVALS = [
   { answer: [2, 3, 5, 7, 11], score: 0.90 },
   { answer: [1, 4, 6, 9], score: 0.34 },
@@ -407,7 +347,8 @@ const brow = ([n, w, v], i) => `<div class="brow${i ? "" : " a"}"><span>${n}</sp
 // The provider prefix gets its own span: inline on desktop, a separate grey line on phones.
 const row = r => {
   const i = r.name.indexOf("/") + 1;
-  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi">${rublePrice(r.input)}</span><span class="tv hi po">${rublePrice(r.output)}</span><span class="cc"><span>Read:<br>Write:</span><span>${rublePrice(r.cacheRead)}<br>${rublePrice(r.cacheWrite)}</span></span><span class="wc"><span>${rublePrice(r.web)}</span><span>${r.webSub}</span></span></div>`;
+  const note = r.priceNote || PRICE_NOTE;
+  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi" title="${note}">${rublePrice(r.input)}</span><span class="tv hi po" title="${note}">${rublePrice(r.output)}</span><span class="cc"><span>Read:<br>Write:</span><span>${rublePrice(r.cacheRead)}<br>${rublePrice(r.cacheWrite)}</span></span><span class="wc"><span>${rublePrice(r.web)}</span><span>${r.webSub}</span></span></div>`;
 };
 
 const globe = () => `<svg viewBox="-2 -2 804 404" role="img" aria-label="Animated global delivery network"><defs><linearGradient id="grid-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset=".78" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="hemisphere-mask"><rect x="-4" y="-4" width="808" height="412" fill="url(#grid-fade)"/></mask></defs><g mask="url(#hemisphere-mask)"><g class="grid">${map(GRID, d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<g mask="url(#hemisphere-mask)"><path class="packet" d="${r.d}" stroke="url(#${r.id}-gradient)"/><defs><radialGradient class="pg" id="${r.id}-gradient" cx="100" cy="100" r="0" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="0.4"/><stop offset="1" stop-opacity="0"/></radialGradient></defs></g>`)}</g>${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
@@ -542,8 +483,8 @@ const ACTIVITY_GLYPHS = [
 const activitySection = () => `<section id="activity" class="wrap st2 activity-section" aria-labelledby="activity-title">
 <h2 id="activity-title">Обучаем, проверяем,<br>выкатываем. Каждый день.</h2>
 <div class="activity-board is-intro">
-<div class="activity-grid" role="group" aria-label="События за последние 26 недель">
-${map(ACTIVITY_DAYS, (day, i) => `<button type="button" class="activity-day" data-day="${i}" data-date="${day.date}" data-level="${day.level}" data-total="${day.total}" data-type="${day.type}" tabindex="${i ? -1 : 0}" aria-label="${day.label}" aria-pressed="false"></button>`)}
+<div class="activity-grid" role="group" aria-label="События за последние 26 недель" inert>
+${map(ACTIVITY_DAYS, (day, i) => `<button type="button" class="activity-day" data-day="${i}" data-date="${day.date}" data-level="${day.level}" data-total="${day.total}" data-type="${day.type}" tabindex="-1" aria-label="${day.label}" aria-pressed="false"></button>`)}
 </div>
 <div class="activity-pixels" aria-hidden="true">${map(ACTIVITY_GLYPHS, (glyph, letter) => map(glyph, (line, row) => map(line.split(""), (bit, col) => bit === "1" ? `<i class="activity-pixel" style="grid-row:${row + 1};grid-column:${letter * 5 + col + 2}"></i>` : "")))}</div>
 </div>
@@ -628,7 +569,7 @@ const page = () => `
 <span class="node nx" style="top:8px">INIT</span><span class="node nx" style="top:204px">EVAL</span><span class="node" style="left:0;top:106px">PUSH</span><span class="node" style="right:0;top:106px">DEVELOP</span>
 </div></div>${ct("01", "RL окружение", "Инициализация, разработка, оценка и публикация окружения.")}</div>
 <div class="bb"><div class="viz eval-viz">
-<div class="envs"><div class="env on"><div>alphy/<b>logic-env</b></div><div class="em"><span>0.2.17</span><span>PRIMEINTELLECT</span></div><div class="evb">Оценить</div></div>${map(ENVS, ([n, v, o]) => `<div class="env"><div>${n}</div><div class="em"><span>${v}</span><span>${o}</span></div></div>`)}</div>
+<div class="envs"><div class="env on"><div>alphy/<b>logic-env</b></div><div class="em"><span>0.2.17</span><span>ALPHY</span></div><div class="evb">Оценить</div></div>${map(ENVS, ([n, v, o]) => `<div class="env"><div>${n}</div><div class="em"><span>${v}</span><span>${o}</span></div></div>`)}</div>
 <div class="evals"><div class="eh"><span>ID</span><span>РЕЗУЛЬТАТ</span><span>ОЦЕНКА</span></div>${map(EVALS, ({ answer, score }, i) => `<div class="er"><span>${i + 1}</span><span title='${JSON.stringify({ answer })}'>"answer": ${JSON.stringify(answer)}</span><span>${score.toFixed(2)}</span></div>`)}</div>
 </div>${ct("02", "Оценки и бенчмарки", "Гибкая оценка производительности моделей")}</div>
 <div class="br"><div class="viz trn">
@@ -648,7 +589,7 @@ const page = () => `
 </section>
 
 <section id="bench" class="wrap st2">
-<div class="g2 bh"><h2>Скорость через API</h2><div style="padding-bottom:4px"><p>Qwen 3.8 27B-A3B, text-only, 4k input → 512 output. Бенчмарки:&nbsp;<a href="https://yukon.org/" target="_blank" rel="noreferrer">yukon.org</a>.</p></div></div>
+<div class="g2 bh"><h2>Скорость через API</h2><div style="padding-bottom:4px"><p>Qwen 3.8 27B-A3B, text-only, 4k input → 512 output. Независимый замер:&nbsp;<a href="https://yukon.org/" target="_blank" rel="noreferrer">yukon.org/alphy</a>.</p></div></div>
 <div class="g2 bgrid">
 <div class="bc br"><div class="bct"><div class="k">TOKENS / SEC</div><div>больше — лучше</div></div><div class="brs">${map(TPS, brow)}</div><div class="bf">+6,7% к ближайшему результату</div></div>
 <div class="bc"><div class="bct"><div class="k">TTFT, МС</div><div>меньше — лучше</div></div><div class="brs">${map(TTFT, brow)}</div><div class="bf">в 2,3 раза быстрее отклик, чем у Selectel</div></div>
@@ -1308,43 +1249,62 @@ function bindActivity() {
     animations.forEach(animation => animation.cancel());
     animations = [];
     pixels.hidden = true;
-    board.classList.remove("is-intro");
+    board.classList.remove("is-intro", "is-scattering");
+    board.classList.add("is-ready");
+    grid.inert = false;
+    days[0].tabIndex = 0;
   };
   const scatter = () => {
     board.classList.remove("is-intro");
-    const bounds = board.getBoundingClientRect();
+    board.classList.add("is-scattering");
+    if (!days[0].animate) { timer = setTimeout(finishIntro, 400); return; }
+    const targets = days.filter(day => Number(day.dataset.level) > 0);
+    const shuffle = activityRandom(9721);
+    for (let i = targets.length - 1; i > 0; i--) {
+      const j = Math.floor(shuffle() * (i + 1));
+      [targets[i], targets[j]] = [targets[j], targets[i]];
+    }
+    const arrivals = new Map();
     [...pixels.children].forEach((pixel, i) => {
       const random = activityRandom(i + 9721);
-      const dx = (random() * 2 - 1) * Math.min(bounds.width * .28, 260);
-      const dy = (random() * 2 - 1) * (bounds.height * .9);
-      const rotation = Math.round(random() * 90 - 45);
-      animations.push(pixel.animate([
-        { transform: "translate3d(0,0,0) scale(1)", opacity: 1, offset: 0 },
-        { transform: `translate3d(${dx * .18}px,${dy * .12}px,0) rotate(${rotation * .2}deg) scale(.95)`, opacity: .95, offset: .25 },
-        { transform: `translate3d(${dx}px,${dy}px,0) rotate(${rotation}deg) scale(.2)`, opacity: 0, offset: 1 }
-      ], { duration: 800 + random() * 450, delay: random() * 180, fill: "both", easing: "cubic-bezier(.25,.46,.45,.94)" }));
+      const target = targets[i % targets.length], from = pixel.getBoundingClientRect(), to = target.getBoundingClientRect();
+      const dx = to.left - from.left, dy = to.top - from.top;
+      const lift = 12 + random() * 30, rotation = random() * 28 - 14;
+      const duration = reduced.matches ? 400 : 950 + random() * 250;
+      const delay = reduced.matches ? 0 : random() * 120;
+      arrivals.set(target, duration + delay);
+      const frames = reduced.matches ? [{ opacity: 1 }, { opacity: 0 }] : [
+        { transform: "translate3d(0,0,0) rotate(0deg)", opacity: 1, offset: 0 },
+        { transform: `translate3d(${dx * .55}px,${dy * .55 - lift}px,0) rotate(${rotation}deg)`, opacity: 1, offset: .55 },
+        { transform: `translate3d(${dx}px,${dy}px,0) rotate(0deg)`, opacity: 1, offset: .85 },
+        { transform: `translate3d(${dx}px,${dy}px,0) rotate(0deg)`, opacity: 0, offset: 1 }
+      ];
+      animations.push(pixel.animate(frames, { duration, delay, fill: "both", easing: "cubic-bezier(.2,.65,.3,1)" }));
     });
     days.forEach((day, i) => {
       const random = activityRandom(i + 829);
-      animations.push(day.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: 550, delay: 330 + random() * 650, fill: "both", easing: "ease-out"
+      const style = getComputedStyle(day);
+      const delay = reduced.matches ? 0 : arrivals.has(day) ? arrivals.get(day) - 200 : 450 + random() * 550;
+      animations.push(day.animate([
+        { backgroundColor: "#080808", borderColor: "#242424", opacity: .5 },
+        { backgroundColor: style.backgroundColor, borderColor: style.borderColor, opacity: 1 }
+      ], {
+        duration: reduced.matches ? 400 : 300, delay, fill: "both", easing: "ease-out"
       }));
     });
-    timer = setTimeout(finishIntro, 1600);
+    Promise.allSettled(animations.map(animation => animation.finished)).then(finishIntro);
+    timer = setTimeout(finishIntro, reduced.matches ? 450 : 1700);
   };
   const start = () => {
     if (started || introDone) return;
     started = true;
-    timer = setTimeout(scatter, 1250);
+    if (observer) observer.disconnect();
+    timer = setTimeout(scatter, 850);
   };
-  if (reduced.matches || !days[0].animate) finishIntro();
-  else {
-    observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) start();
-    }, { threshold: .6 });
-    observer.observe(board);
-  }
-  reduced.addEventListener("change", e => { if (e.matches) finishIntro(); });
+  observer = new IntersectionObserver(entries => {
+    if (entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .6)) start();
+  }, { threshold: .6 });
+  observer.observe(board);
 
   const placeTip = () => {
     if (!current || tip.hidden) return;
@@ -1362,7 +1322,7 @@ function bindActivity() {
     tip.hidden = true;
   };
   const showDay = day => {
-    finishIntro();
+    if (!introDone) return;
     if (current !== day) hide();
     current = day;
     const index = Number(day.dataset.day);
@@ -1386,10 +1346,12 @@ function bindActivity() {
     day.addEventListener("focus", () => showDay(day));
     day.addEventListener("blur", () => { if (!pinned) hide(); });
     day.addEventListener("click", () => {
+      if (!introDone) return;
       if (pinned === day) { unpin(); hide(); }
       else { unpin(); pinned = day; day.setAttribute("aria-pressed", "true"); showDay(day); }
     });
     day.addEventListener("keydown", e => {
+      if (!introDone) return;
       const row = i % 7;
       let next = i;
       if (e.key === "ArrowRight") next = i + 7 < days.length ? i + 7 : i;
@@ -1408,7 +1370,7 @@ function bindActivity() {
     if (!grid.contains(e.target)) { unpin(); hide(); }
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") { unpin(); hide(); } });
-  addEventListener("resize", () => { if (started) finishIntro(); placeTip(); });
+  addEventListener("resize", placeTip);
   const updateTip = () => {
     if (!current) return;
     const r = current.getBoundingClientRect(), bounds = board.getBoundingClientRect();
@@ -1424,7 +1386,6 @@ function mount() {
   root.className = "root";
   root.innerHTML = page();
   document.body.prepend(root);
-  placeHeroLogos(root);
   ocean(root.querySelector(".ocean canvas"));
   globeAnim(root.querySelector(".globe svg"));
   renderRows();
@@ -1443,17 +1404,6 @@ function mount() {
     target.scrollIntoView();
     html.style.scrollBehavior = "";
   }
-}
-
-function placeHeroLogos(root) {
-  const logos = root.querySelector(".lgw"), hero = root.querySelector(".hero"), cta = root.querySelector(".cta");
-  const compact = matchMedia("(max-width:1080px)");
-  const place = () => {
-    if (compact.matches) cta.before(logos);
-    else hero.after(logos);
-  };
-  compact.addEventListener("change", place);
-  place();
 }
 
 // Mount once the stylesheet (injected by index.html next to this script) and the DOM are ready — no unstyled flash.
