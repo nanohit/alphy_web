@@ -462,6 +462,94 @@ const barsSection = () => `<section id="how" class="wrap st2 bars-section" aria-
 <div class="bars-tooltip" id="bars-tooltip" role="tooltip" hidden><span id="bars-tooltip-text"></span></div>
 </section>`;
 
+/* Activity preview: 182 real calendar dates, deterministic synthetic events.
+   Replace makeActivityDays with the event feed when it is available. */
+const activityRandom = seed => {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6D2B79F5) | 0;
+    let n = Math.imul(state ^ state >>> 15, 1 | state);
+    n ^= n + Math.imul(n ^ n >>> 7, 61 | n);
+    return ((n ^ n >>> 14) >>> 0) / 4294967296;
+  };
+};
+const activityQuantity = (n, one, few, many) => n + " " +
+  (n % 100 >= 11 && n % 100 <= 14 ? many : n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many);
+
+function makeActivityDays(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", { timeZone: "Europe/Moscow", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(now);
+  const part = key => Number(parts.find(p => p.type === key).value);
+  const end = Date.UTC(part("year"), part("month") - 1, part("day"));
+  const format = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" });
+  const types = ["experiment", "deployment", "retraining", "ab-test", "rollback"];
+  let active = 0, cycle = [];
+  return Array.from({ length: 182 }, (_, i) => {
+    const date = new Date(end - (181 - i) * 86400000);
+    const random = activityRandom(Math.floor(date.getTime() / 86400000) ^ 0xA1F4);
+    const weekend = date.getUTCDay() === 0 || date.getUTCDay() === 6;
+    let summary = "без новых событий", type = "quiet", total = 0;
+    if (random() > (weekend ? .32 : .10)) {
+      // A shuffled cycle keeps the five primary event types evenly represented.
+      if (active % 5 === 0) {
+        cycle = types.slice();
+        const shuffle = activityRandom(Math.floor(active / 5) + 4137);
+        for (let j = 4; j > 0; j--) {
+          const k = Math.floor(shuffle() * (j + 1));
+          [cycle[j], cycle[k]] = [cycle[k], cycle[j]];
+        }
+      }
+      type = cycle[active++ % 5];
+      const experiments = 1 + Math.floor(random() * (weekend ? 3 : 6));
+      const exp = activityQuantity(experiments, "эксперимент", "эксперимента", "экспериментов");
+      const target = ["ранжирования", "рекомендаций", "поиска"][Math.floor(random() * 3)];
+      if (type === "experiment") {
+        const deploy = random() > .55, retrain = random() > .8;
+        total = experiments + Number(deploy) + Number(retrain);
+        summary = exp + (random() > .45 ? " с квантизацией, latency −" + (3 + Math.floor(random() * 12)) + "%" : "") +
+          (deploy ? ", выкатка" : "") + (retrain ? ", переобучение " + target : "");
+      } else if (type === "deployment") {
+        const preceding = random() > .4;
+        total = 1 + (preceding ? experiments : 0);
+        summary = (preceding ? exp + ", " : "") + (random() > .75 ? "новый проект: пайплайн развёрнут за день" : "новая модель " + target + " в проде");
+      } else if (type === "retraining") {
+        const preceding = random() > .5, deploy = random() > .65;
+        total = 1 + Number(deploy) + (preceding ? experiments : 0);
+        summary = (random() > .5 ? "дрейф данных → автопереобучение" : "переобучение " + target) +
+          (preceding ? ", " + exp : "") + (deploy ? ", выкатка" : "");
+      } else if (type === "ab-test") {
+        const preceding = random() > .5, deploy = random() > .45;
+        total = 1 + Number(deploy) + (preceding ? experiments : 0);
+        summary = "A/B-тест " + target + " завершён" + (deploy ? ", новая модель в проде" : "") + (preceding ? ", " + exp : "");
+      } else {
+        const preceding = random() > .55;
+        total = 2 + (preceding ? experiments : 0);
+        summary = "выкатка, откат за " + (2 + Math.floor(random() * 5)) + " мин после аномалии в метриках" + (preceding ? ", " + exp : "");
+      }
+    }
+    const level = total === 0 ? 0 : total <= 2 ? 1 : total <= 4 ? 2 : total <= 6 ? 3 : 4;
+    return { date: date.toISOString().slice(0, 10), label: format.format(date) + " · " + summary, type, total, level };
+  });
+}
+
+const ACTIVITY_DAYS = makeActivityDays();
+const ACTIVITY_GLYPHS = [
+  ["0000", "0000", "0110", "0001", "0111", "1001", "0111"],
+  ["1100", "0100", "0100", "0100", "0100", "0100", "0110"],
+  ["0000", "0000", "1110", "1001", "1110", "1000", "1000"],
+  ["1000", "1000", "1000", "1110", "1001", "1001", "1001"],
+  ["0000", "0000", "1001", "1001", "0111", "0001", "0110"]
+];
+const activitySection = () => `<section id="activity" class="wrap st2 activity-section" aria-labelledby="activity-title">
+<h2 id="activity-title">Обучаем, проверяем,<br>выкатываем. Каждый день.</h2>
+<div class="activity-board is-intro">
+<div class="activity-grid" role="group" aria-label="События за последние 26 недель">
+${map(ACTIVITY_DAYS, (day, i) => `<button type="button" class="activity-day" data-day="${i}" data-date="${day.date}" data-level="${day.level}" data-total="${day.total}" data-type="${day.type}" tabindex="${i ? -1 : 0}" aria-label="${day.label}" aria-pressed="false"></button>`)}
+</div>
+<div class="activity-pixels" aria-hidden="true">${map(ACTIVITY_GLYPHS, (glyph, letter) => map(glyph, (line, row) => map(line.split(""), (bit, col) => bit === "1" ? `<i class="activity-pixel" style="grid-row:${row + 1};grid-column:${letter * 5 + col + 2}"></i>` : "")))}</div>
+</div>
+<div id="activity-tooltip" class="activity-tooltip" role="tooltip" hidden></div>
+</section>`;
+
 const page = () => `
 <header class="hd"><div class="wrap">
 <a href="#top" class="logo">alphy</a>
@@ -570,6 +658,8 @@ const page = () => `
 </section>
 
 ${barsSection()}
+
+${activitySection()}
 
 <section id="power" class="wrap st2"><div class="g2 pw"><h2>Ваши модели<br>на наших мощностях</h2><div class="gw"><div class="globe">${globe()}</div></div></div></section>
 
@@ -1205,11 +1295,136 @@ function bindBars() {
   addEventListener("resize", placeTooltip);
 }
 
+function bindActivity() {
+  const section = $("activity"), board = section.querySelector(".activity-board"), grid = section.querySelector(".activity-grid");
+  const days = [...grid.querySelectorAll(".activity-day")], pixels = board.querySelector(".activity-pixels"), tip = $("activity-tooltip");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let introDone = false, started = false, timer = 0, observer, animations = [], current = null, pinned = null;
+  const finishIntro = () => {
+    if (introDone) return;
+    introDone = true;
+    clearTimeout(timer);
+    if (observer) observer.disconnect();
+    animations.forEach(animation => animation.cancel());
+    animations = [];
+    pixels.hidden = true;
+    board.classList.remove("is-intro");
+  };
+  const scatter = () => {
+    board.classList.remove("is-intro");
+    const bounds = board.getBoundingClientRect();
+    [...pixels.children].forEach((pixel, i) => {
+      const random = activityRandom(i + 9721);
+      const dx = (random() * 2 - 1) * Math.min(bounds.width * .28, 260);
+      const dy = (random() * 2 - 1) * (bounds.height * .9);
+      const rotation = Math.round(random() * 90 - 45);
+      animations.push(pixel.animate([
+        { transform: "translate3d(0,0,0) scale(1)", opacity: 1, offset: 0 },
+        { transform: `translate3d(${dx * .18}px,${dy * .12}px,0) rotate(${rotation * .2}deg) scale(.95)`, opacity: .95, offset: .25 },
+        { transform: `translate3d(${dx}px,${dy}px,0) rotate(${rotation}deg) scale(.2)`, opacity: 0, offset: 1 }
+      ], { duration: 800 + random() * 450, delay: random() * 180, fill: "both", easing: "cubic-bezier(.25,.46,.45,.94)" }));
+    });
+    days.forEach((day, i) => {
+      const random = activityRandom(i + 829);
+      animations.push(day.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 550, delay: 330 + random() * 650, fill: "both", easing: "ease-out"
+      }));
+    });
+    timer = setTimeout(finishIntro, 1600);
+  };
+  const start = () => {
+    if (started || introDone) return;
+    started = true;
+    timer = setTimeout(scatter, 1250);
+  };
+  if (reduced.matches || !days[0].animate) finishIntro();
+  else {
+    observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) start();
+    }, { threshold: .6 });
+    observer.observe(board);
+  }
+  reduced.addEventListener("change", e => { if (e.matches) finishIntro(); });
+
+  const placeTip = () => {
+    if (!current || tip.hidden) return;
+    const r = current.getBoundingClientRect();
+    const width = tip.offsetWidth, height = tip.offsetHeight;
+    tip.style.left = Math.max(12, Math.min(innerWidth - width - 12, r.left + r.width / 2 - width / 2)) + "px";
+    tip.style.top = (r.top - height - 12 >= 70 ? r.top - height - 12 : Math.min(innerHeight - height - 12, r.bottom + 12)) + "px";
+  };
+  const hide = () => {
+    if (current) {
+      current.classList.remove("is-active");
+      current.removeAttribute("aria-describedby");
+    }
+    current = null;
+    tip.hidden = true;
+  };
+  const showDay = day => {
+    finishIntro();
+    if (current !== day) hide();
+    current = day;
+    const index = Number(day.dataset.day);
+    tip.textContent = ACTIVITY_DAYS[index].label;
+    tip.hidden = false;
+    day.classList.add("is-active");
+    day.setAttribute("aria-describedby", "activity-tooltip");
+    days.forEach(button => { button.tabIndex = button === day ? 0 : -1; });
+    placeTip();
+  };
+  const unpin = () => {
+    if (pinned) pinned.setAttribute("aria-pressed", "false");
+    pinned = null;
+  };
+  days.forEach((day, i) => {
+    day.addEventListener("pointerenter", e => { if (e.pointerType !== "touch") showDay(day); });
+    day.addEventListener("pointerleave", () => {
+      if (pinned) showDay(pinned);
+      else if (document.activeElement !== day) hide();
+    });
+    day.addEventListener("focus", () => showDay(day));
+    day.addEventListener("blur", () => { if (!pinned) hide(); });
+    day.addEventListener("click", () => {
+      if (pinned === day) { unpin(); hide(); }
+      else { unpin(); pinned = day; day.setAttribute("aria-pressed", "true"); showDay(day); }
+    });
+    day.addEventListener("keydown", e => {
+      const row = i % 7;
+      let next = i;
+      if (e.key === "ArrowRight") next = i + 7 < days.length ? i + 7 : i;
+      else if (e.key === "ArrowLeft") next = i >= 7 ? i - 7 : i;
+      else if (e.key === "ArrowUp") next = row ? i - 1 : i;
+      else if (e.key === "ArrowDown") next = row < 6 ? i + 1 : i;
+      else if (e.key === "Home") next = i - row;
+      else if (e.key === "End") next = i + 6 - row;
+      else return;
+      e.preventDefault();
+      unpin();
+      days[next].focus();
+    });
+  });
+  document.addEventListener("pointerdown", e => {
+    if (!grid.contains(e.target)) { unpin(); hide(); }
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { unpin(); hide(); } });
+  addEventListener("resize", () => { if (started) finishIntro(); placeTip(); });
+  const updateTip = () => {
+    if (!current) return;
+    const r = current.getBoundingClientRect(), bounds = board.getBoundingClientRect();
+    if (r.bottom < 70 || r.top > innerHeight || r.right < bounds.left || r.left > bounds.right) { unpin(); hide(); }
+    else placeTip();
+  };
+  addEventListener("scroll", updateTip, { passive: true });
+  board.addEventListener("scroll", updateTip, { passive: true });
+}
+
 function mount() {
   const root = document.createElement("div");
   root.className = "root";
   root.innerHTML = page();
   document.body.prepend(root);
+  placeHeroLogos(root);
   ocean(root.querySelector(".ocean canvas"));
   globeAnim(root.querySelector(".globe svg"));
   renderRows();
@@ -1217,6 +1432,7 @@ function mount() {
   bindPanel();
   bindChart();
   bindBars();
+  bindActivity();
   if (!SHOW_DEMO_ANSWER) showNotice();
   if (!API_ENDPOINT.trim()) bindAuto();
   // The markup arrives after load, so jump to a #section from the URL by hand (without smooth scrolling).
@@ -1227,6 +1443,17 @@ function mount() {
     target.scrollIntoView();
     html.style.scrollBehavior = "";
   }
+}
+
+function placeHeroLogos(root) {
+  const logos = root.querySelector(".lgw"), hero = root.querySelector(".hero"), cta = root.querySelector(".cta");
+  const compact = matchMedia("(max-width:1080px)");
+  const place = () => {
+    if (compact.matches) cta.before(logos);
+    else hero.after(logos);
+  };
+  compact.addEventListener("change", place);
+  place();
 }
 
 // Mount once the stylesheet (injected by index.html next to this script) and the DOM are ready — no unstyled flash.
