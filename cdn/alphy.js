@@ -322,7 +322,7 @@ const SLA = [
   ["API", "OpenAI-compatible · замена endpoint без переписывания SDK"],
   ["МОНИТОРИНГ", "TTFT · TPOT · throughput · токены · стоимость · request trace"]
 ];
-const KPI = [["114 мс", "p50 TTFT"], ["417 мс", "p95 TTFT"], ["0,31%", "fallback rate"]];
+const KPI = [[TTFT[0][2] + " мс", "p50 TTFT"], ["417 мс", "p95 TTFT"], ["0,31%", "fallback rate"]];
 
 const JURS = [["+7", "Россия"], ["+86", "Китай"], ["+65", "Сингапур"], ["+381", "Сербия"], ["+994", "Азербайджан"], ["+971", "ОАЭ"], ["+7", "Казахстан"], ["+375", "Беларусь"], ["+995", "Грузия"], ["+374", "Армения"], ["+996", "Кыргызстан"], ["+992", "Таджикистан"], ["+998", "Узбекистан"]];
 
@@ -480,13 +480,16 @@ const ACTIVITY_GLYPHS = [
   ["1000", "1000", "1000", "1110", "1001", "1001", "1001"],
   ["0000", "0000", "1001", "1001", "0111", "0001", "0110"]
 ];
+const ACTIVITY_WORD = new Set();
+ACTIVITY_GLYPHS.forEach((glyph, letter) => glyph.forEach((line, row) => {
+  [...line].forEach((bit, col) => { if (bit === "1") ACTIVITY_WORD.add((letter * 5 + col + 1) * 7 + row); });
+}));
 const activitySection = () => `<section id="activity" class="wrap st2 activity-section" aria-labelledby="activity-title">
-<h2 id="activity-title">Обучаем, проверяем,<br>выкатываем. Каждый день.</h2>
+<h2 id="activity-title">Обучаем, проверяем,<br>выкатываем. Почти без перерывов.</h2>
 <div class="activity-board is-intro">
 <div class="activity-grid" role="group" aria-label="События за последние 26 недель" inert>
-${map(ACTIVITY_DAYS, (day, i) => `<button type="button" class="activity-day" data-day="${i}" data-date="${day.date}" data-level="${day.level}" data-total="${day.total}" data-type="${day.type}" tabindex="-1" aria-label="${day.label}" aria-pressed="false"></button>`)}
+${map(ACTIVITY_DAYS, (day, i) => `<button type="button" class="activity-day" data-day="${i}" data-date="${day.date}" data-level="${day.level}" data-word="${ACTIVITY_WORD.has(i) ? 1 : 0}" data-total="${day.total}" data-type="${day.type}" tabindex="-1" aria-label="${day.label}" aria-pressed="false"></button>`)}
 </div>
-<div class="activity-pixels" aria-hidden="true">${map(ACTIVITY_GLYPHS, (glyph, letter) => map(glyph, (line, row) => map(line.split(""), (bit, col) => bit === "1" ? `<i class="activity-pixel" style="grid-row:${row + 1};grid-column:${letter * 5 + col + 2}"></i>` : "")))}</div>
 </div>
 <div id="activity-tooltip" class="activity-tooltip" role="tooltip" hidden></div>
 </section>`;
@@ -1238,71 +1241,27 @@ function bindBars() {
 
 function bindActivity() {
   const section = $("activity"), board = section.querySelector(".activity-board"), grid = section.querySelector(".activity-grid");
-  const days = [...grid.querySelectorAll(".activity-day")], pixels = board.querySelector(".activity-pixels"), tip = $("activity-tooltip");
+  const days = [...grid.querySelectorAll(".activity-day")], tip = $("activity-tooltip");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  let introDone = false, started = false, timer = 0, observer, animations = [], current = null, pinned = null;
+  let introDone = false, started = false, current = null, pinned = null, focusDay = days[0];
   const finishIntro = () => {
-    if (introDone) return;
     introDone = true;
-    clearTimeout(timer);
-    if (observer) observer.disconnect();
-    animations.forEach(animation => animation.cancel());
-    animations = [];
-    pixels.hidden = true;
-    board.classList.remove("is-intro", "is-scattering");
+    board.classList.remove("is-changing");
     board.classList.add("is-ready");
     grid.inert = false;
-    days[0].tabIndex = 0;
+    focusDay.tabIndex = 0;
   };
-  const scatter = () => {
+  const changeColors = () => {
+    board.classList.add("is-changing");
     board.classList.remove("is-intro");
-    board.classList.add("is-scattering");
-    if (!days[0].animate) { timer = setTimeout(finishIntro, 400); return; }
-    const targets = days.filter(day => Number(day.dataset.level) > 0);
-    const shuffle = activityRandom(9721);
-    for (let i = targets.length - 1; i > 0; i--) {
-      const j = Math.floor(shuffle() * (i + 1));
-      [targets[i], targets[j]] = [targets[j], targets[i]];
-    }
-    const arrivals = new Map();
-    [...pixels.children].forEach((pixel, i) => {
-      const random = activityRandom(i + 9721);
-      const target = targets[i % targets.length], from = pixel.getBoundingClientRect(), to = target.getBoundingClientRect();
-      const dx = to.left - from.left, dy = to.top - from.top;
-      const lift = 12 + random() * 30, rotation = random() * 28 - 14;
-      const duration = reduced.matches ? 400 : 950 + random() * 250;
-      const delay = reduced.matches ? 0 : random() * 120;
-      arrivals.set(target, duration + delay);
-      const frames = reduced.matches ? [{ opacity: 1 }, { opacity: 0 }] : [
-        { transform: "translate3d(0,0,0) rotate(0deg)", opacity: 1, offset: 0 },
-        { transform: `translate3d(${dx * .55}px,${dy * .55 - lift}px,0) rotate(${rotation}deg)`, opacity: 1, offset: .55 },
-        { transform: `translate3d(${dx}px,${dy}px,0) rotate(0deg)`, opacity: 1, offset: .85 },
-        { transform: `translate3d(${dx}px,${dy}px,0) rotate(0deg)`, opacity: 0, offset: 1 }
-      ];
-      animations.push(pixel.animate(frames, { duration, delay, fill: "both", easing: "cubic-bezier(.2,.65,.3,1)" }));
-    });
-    days.forEach((day, i) => {
-      const random = activityRandom(i + 829);
-      const style = getComputedStyle(day);
-      const delay = reduced.matches ? 0 : arrivals.has(day) ? arrivals.get(day) - 200 : 450 + random() * 550;
-      animations.push(day.animate([
-        { backgroundColor: "#080808", borderColor: "#242424", opacity: .5 },
-        { backgroundColor: style.backgroundColor, borderColor: style.borderColor, opacity: 1 }
-      ], {
-        duration: reduced.matches ? 400 : 300, delay, fill: "both", easing: "ease-out"
-      }));
-    });
-    Promise.allSettled(animations.map(animation => animation.finished)).then(finishIntro);
-    timer = setTimeout(finishIntro, reduced.matches ? 450 : 1700);
+    setTimeout(finishIntro, reduced.matches ? 200 : 750);
   };
-  const start = () => {
-    if (started || introDone) return;
+  // One observation and two timers. Cells never move; CSS changes their colors once.
+  const observer = new IntersectionObserver(entries => {
+    if (started || !entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .6)) return;
     started = true;
-    if (observer) observer.disconnect();
-    timer = setTimeout(scatter, 850);
-  };
-  observer = new IntersectionObserver(entries => {
-    if (entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .6)) start();
+    observer.disconnect();
+    setTimeout(changeColors, 1800);
   }, { threshold: .6 });
   observer.observe(board);
 
@@ -1330,41 +1289,51 @@ function bindActivity() {
     tip.hidden = false;
     day.classList.add("is-active");
     day.setAttribute("aria-describedby", "activity-tooltip");
-    days.forEach(button => { button.tabIndex = button === day ? 0 : -1; });
+    if (focusDay !== day) {
+      focusDay.tabIndex = -1;
+      day.tabIndex = 0;
+      focusDay = day;
+    }
     placeTip();
   };
   const unpin = () => {
     if (pinned) pinned.setAttribute("aria-pressed", "false");
     pinned = null;
   };
-  days.forEach((day, i) => {
-    day.addEventListener("pointerenter", e => { if (e.pointerType !== "touch") showDay(day); });
-    day.addEventListener("pointerleave", () => {
-      if (pinned) showDay(pinned);
-      else if (document.activeElement !== day) hide();
-    });
-    day.addEventListener("focus", () => showDay(day));
-    day.addEventListener("blur", () => { if (!pinned) hide(); });
-    day.addEventListener("click", () => {
-      if (!introDone) return;
-      if (pinned === day) { unpin(); hide(); }
-      else { unpin(); pinned = day; day.setAttribute("aria-pressed", "true"); showDay(day); }
-    });
-    day.addEventListener("keydown", e => {
-      if (!introDone) return;
-      const row = i % 7;
-      let next = i;
-      if (e.key === "ArrowRight") next = i + 7 < days.length ? i + 7 : i;
-      else if (e.key === "ArrowLeft") next = i >= 7 ? i - 7 : i;
-      else if (e.key === "ArrowUp") next = row ? i - 1 : i;
-      else if (e.key === "ArrowDown") next = row < 6 ? i + 1 : i;
-      else if (e.key === "Home") next = i - row;
-      else if (e.key === "End") next = i + 6 - row;
-      else return;
-      e.preventDefault();
-      unpin();
-      days[next].focus();
-    });
+  const dayFrom = target => target instanceof Element ? target.closest(".activity-day") : null;
+  grid.addEventListener("pointerover", e => {
+    const day = dayFrom(e.target);
+    if (day && e.pointerType !== "touch" && dayFrom(e.relatedTarget) !== day) showDay(day);
+  });
+  grid.addEventListener("pointerout", e => {
+    const day = dayFrom(e.target);
+    if (!day || dayFrom(e.relatedTarget) === day) return;
+    if (pinned) showDay(pinned);
+    else if (document.activeElement !== day) hide();
+  });
+  grid.addEventListener("focusin", e => { const day = dayFrom(e.target); if (day) showDay(day); });
+  grid.addEventListener("focusout", () => { if (!pinned) hide(); });
+  grid.addEventListener("click", e => {
+    const day = dayFrom(e.target);
+    if (!introDone || !day) return;
+    if (pinned === day) { unpin(); hide(); }
+    else { unpin(); pinned = day; day.setAttribute("aria-pressed", "true"); showDay(day); }
+  });
+  grid.addEventListener("keydown", e => {
+    const day = dayFrom(e.target);
+    if (!introDone || !day) return;
+    const i = Number(day.dataset.day), row = i % 7;
+    let next = i;
+    if (e.key === "ArrowRight") next = i + 7 < days.length ? i + 7 : i;
+    else if (e.key === "ArrowLeft") next = i >= 7 ? i - 7 : i;
+    else if (e.key === "ArrowUp") next = row ? i - 1 : i;
+    else if (e.key === "ArrowDown") next = row < 6 ? i + 1 : i;
+    else if (e.key === "Home") next = i - row;
+    else if (e.key === "End") next = i + 6 - row;
+    else return;
+    e.preventDefault();
+    unpin();
+    days[next].focus();
   });
   document.addEventListener("pointerdown", e => {
     if (!grid.contains(e.target)) { unpin(); hide(); }
