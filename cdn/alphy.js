@@ -351,7 +351,7 @@ const row = r => {
   return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi" title="${note}">${rublePrice(r.input)}</span><span class="tv hi po" title="${note}">${rublePrice(r.output)}</span><span class="cc"><span>Read:<br>Write:</span><span>${rublePrice(r.cacheRead)}<br>${rublePrice(r.cacheWrite)}</span></span><span class="wc"><span>${rublePrice(r.web)}</span><span>${r.webSub}</span></span></div>`;
 };
 
-const globe = () => `<svg viewBox="-2 -2 804 404" role="img" aria-label="Animated global delivery network"><defs><linearGradient id="grid-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset=".78" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="hemisphere-mask"><rect x="-4" y="-4" width="808" height="412" fill="url(#grid-fade)"/></mask></defs><g mask="url(#hemisphere-mask)"><g class="grid">${map(GRID, d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<g mask="url(#hemisphere-mask)"><path class="packet" d="${r.d}" stroke="url(#${r.id}-gradient)"/><defs><radialGradient class="pg" id="${r.id}-gradient" cx="100" cy="100" r="0" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="0.4"/><stop offset="1" stop-opacity="0"/></radialGradient></defs></g>`)}</g>${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
+const globe = () => `<svg viewBox="-2 -2 804 804" aria-hidden="true"><g class="grid">${map([...GRID, "M12.702 500H787.299", "M53.59 600H746.41", "M135.425 700H664.575"], d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<path class="packet" d="${r.d}" pathLength="1000" stroke-dasharray="24 976" opacity="0"/>`)}${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
 
 /* BARS: shared topics keep the copy, diagram and technical notes in sync. */
 const BARS_TOPICS = {
@@ -398,7 +398,6 @@ const barsSection = () => `<section id="how" class="wrap st2 bars-section" aria-
 <div class="bars-copy-block" data-bars-copy="gpu"><p>Каждая часть модели (эксперт) хранится <strong>в одном месте, без дублей</strong>. Самые востребованные лежат прямо на видеокартах, причём те, что обычно срабатывают вместе, расположены рядом. Поэтому ${barsTerm("gpu", "256 ГБ видеопамяти")} дают <strong>256 ГБ места</strong>, а не восемь копий одного и того же.</p></div>
 <div class="bars-copy-block" data-bars-copy="ram cpu nvme"><p>Менее востребованные эксперты лежат в ${barsTerm("ram", "1,5 ТБ быстрой оперативной памяти")}. Это второй ярус памяти: <strong>два Xeon 6</strong> ${barsTerm("cpu", "считают их прямо на месте")}, без перетаскивания на видеокарты.</p><p>Редко используемые хранятся на ${barsTerm("nvme", "восьми NVMe-дисках (~100 ГБ/с)")} и подгружаются <strong>на слой раньше</strong>, чем понадобятся.</p></div>
 <div class="bars-copy-block" data-bars-copy="pcie"><p>У каждой видеокарты и каждого диска ${barsTerm("pcie", "своя полноценная линия связи")}, ни с кем не поделённая.</p></div>
-<p class="bars-conclusion">Мы отправляем вычисления туда,<br class="bars-desktop-break"> где лежит модель.</p>
 </div>${barsDiagram()}</div>
 <div class="bars-tooltip" id="bars-tooltip" role="tooltip" hidden><span id="bars-tooltip-text"></span></div>
 </section>`;
@@ -473,6 +472,7 @@ function makeActivityDays(now = new Date()) {
 }
 
 const ACTIVITY_DAYS = makeActivityDays();
+const ACTIVITY_TOTAL = ACTIVITY_DAYS.reduce((total, day) => total + day.total, 0);
 const ACTIVITY_GLYPHS = [
   ["0000", "0000", "0110", "0001", "0111", "1001", "0111"],
   ["1100", "0100", "0100", "0100", "0100", "0100", "0110"],
@@ -485,10 +485,14 @@ ACTIVITY_GLYPHS.forEach((glyph, letter) => glyph.forEach((line, row) => {
   [...line].forEach((bit, col) => { if (bit === "1") ACTIVITY_WORD.add((letter * 5 + col + 1) * 7 + row); });
 }));
 const activitySection = () => `<section id="activity" class="wrap st2 activity-section" aria-labelledby="activity-title">
-<h2 id="activity-title">Обучаем, проверяем,<br>выкатываем. Почти без перерывов.</h2>
+<div class="activity-copy"><h2 id="activity-title">Обучаем, проверяем,<br>выкатываем. Почти без перерывов.</h2>
+<p>Кастомные пайплайны под ваши задачи, без простоев и ручных выкаток.</p></div>
+<div class="activity-calendar">
+<p class="activity-count">${activityQuantity(ACTIVITY_TOTAL, "событие", "события", "событий")} за последние полгода</p>
 <div class="activity-board is-intro">
 <div class="activity-grid" role="group" aria-label="События за последние 26 недель" inert>
 ${map(ACTIVITY_DAYS, (day, i) => `<button type="button" class="activity-day" data-day="${i}" data-date="${day.date}" data-level="${day.level}" data-word="${ACTIVITY_WORD.has(i) ? 1 : 0}" data-total="${day.total}" data-type="${day.type}" tabindex="-1" aria-label="${day.label}" aria-pressed="false"></button>`)}
+</div>
 </div>
 </div>
 <div id="activity-tooltip" class="activity-tooltip" role="tooltip" hidden></div>
@@ -605,7 +609,11 @@ ${barsSection()}
 
 ${activitySection()}
 
-<section id="power" class="wrap st2"><div class="g2 pw"><h2>Ваши модели<br>на наших мощностях</h2><div class="gw"><div class="globe">${globe()}</div></div></div></section>
+<div class="site-ending">
+<div class="globe" aria-hidden="true">${globe()}</div>
+<section id="power" class="power" aria-label="Связаться с Alphy"><div class="power-actions">
+<button class="bw lg" data-act="contact">Связаться</button><button class="bo lg" data-act="login">Войти</button>
+</div></section>
 
 <footer class="wrap ft"><div class="fc">
 <div><div class="logo">alphy</div><p>Мгновенный доступ к передовым моделям.</p></div>
@@ -614,6 +622,7 @@ ${activitySection()}
 </div>
 <div class="fb"><span>© 2026 alphy</span><span>Самый быстрый ML инференс в СНГ</span></div>
 </footer>
+</div>
 
 <div class="ov" id="modal"><div class="mcard">
 <button class="x" data-act="close" aria-label="Закрыть">${CLOSE}</button>
@@ -655,6 +664,7 @@ const FRAG = `
   precision highp float;
   uniform vec2 u_resolution;
   uniform float u_time;
+  uniform vec2 u_pixelScale;
   float hash(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);}
   float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
     return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),f.x),mix(hash(i+vec2(0.0,1.0)),hash(i+1.0),f.x),f.y);}
@@ -663,14 +673,15 @@ const FRAG = `
   float sea(vec2 p,float t){vec2 q=vec2(fbm(p+vec2(0.0,t*0.09)),fbm(p+vec2(5.2,-t*0.07)));
     return fbm(p+2.4*q+vec2(t*0.035,-t*0.055));}
   void main(){
-    vec2 p=(gl_FragCoord.xy*2.0-u_resolution.xy)/u_resolution.y;
+    vec2 pixel=gl_FragCoord.xy*u_pixelScale;
+    vec2 p=(pixel*2.0-u_resolution.xy)/u_resolution.y;
     float t=u_time;
     float tide=sea(p*1.00,t);
     float detail=fbm(p*2.85+11.0+vec2(t*0.05,-t*0.04));
     float waves=smoothstep(0.38,0.78,tide*0.78+detail*0.34);
     waves*=0.70+0.30*smoothstep(0.43,0.72,tide);
     float cell=clamp(floor(min(u_resolution.x,u_resolution.y)/26.0),7.0,16.0);
-    vec2 local=fract(gl_FragCoord.xy/cell)-0.5;
+    vec2 local=fract(pixel/cell)-0.5;
     float radius=0.105+waves*0.305;
     float dotMask=1.0-smoothstep(radius,radius+0.045,length(local));
     float vignette=1.0-smoothstep(0.45,1.38,length(p*vec2(0.72,1.0)));
@@ -680,68 +691,132 @@ const FRAG = `
     gl_FragColor=vec4(vec3(lum),1.0);
   }`;
 
+// Decorative motion runs only on screen, in the foreground, at at most 20 fps.
+// No RAF or timer stays scheduled while the effect is paused.
+function visibleAnimation(element, draw, fps = 20) {
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let visible = false, running = false, timer = 0, raf = 0, time = 0, last = 0;
+  const cancel = () => {
+    clearTimeout(timer); cancelAnimationFrame(raf);
+    timer = raf = 0; running = false; last = 0;
+  };
+  const frame = now => {
+    raf = 0;
+    if (!running) return;
+    if (last) time += now - last;
+    last = now;
+    draw(time);
+    timer = setTimeout(() => {
+      timer = 0;
+      if (running) raf = requestAnimationFrame(frame);
+    }, 1000 / fps);
+  };
+  const sync = () => {
+    const active = visible && !document.hidden && !document.documentElement.classList.contains("modal-open");
+    if (!active || reduced.matches) {
+      cancel();
+      if (active) draw(time);
+    } else if (!running) {
+      running = true;
+      raf = requestAnimationFrame(frame);
+    }
+  };
+  const observer = new IntersectionObserver(entries => {
+    visible = entries[entries.length - 1].isIntersecting;
+    sync();
+  });
+  observer.observe(element);
+  document.addEventListener("visibilitychange", sync);
+  document.addEventListener("alphy:motion", sync);
+  reduced.addEventListener("change", sync);
+  const dispose = () => {
+    cancel(); observer.disconnect();
+    document.removeEventListener("visibilitychange", sync);
+    document.removeEventListener("alphy:motion", sync);
+    reduced.removeEventListener("change", sync);
+    removeEventListener("pagehide", pagehide);
+    removeEventListener("pageshow", sync);
+  };
+  const pagehide = event => { if (event.persisted) cancel(); else dispose(); };
+  addEventListener("pagehide", pagehide);
+  addEventListener("pageshow", sync);
+  return { refresh: () => { if (visible && !document.hidden && !document.documentElement.classList.contains("modal-open")) draw(time); }, dispose };
+}
+
 function ocean(c) {
-  const gl = c.getContext("webgl", { antialias: false, alpha: false, powerPreference: "low-power" });
+  const gl = c.getContext("webgl", { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: "low-power" });
   if (!gl) return;
-  const prog = gl.createProgram();
+  const prog = gl.createProgram(), shaders = [];
   [[gl.VERTEX_SHADER, VERT], [gl.FRAGMENT_SHADER, FRAG]].forEach(([type, src]) => {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    gl.attachShader(prog, s);
+    const shader = gl.createShader(type);
+    shaders.push(shader);
+    gl.shaderSource(shader, src);
+    gl.compileShader(shader);
+    gl.attachShader(prog, shader);
   });
   gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+  shaders.forEach(shader => gl.deleteShader(shader));
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { gl.deleteProgram(prog); return; }
   gl.useProgram(prog);
-  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const pos = gl.getAttribLocation(prog, "a_position");
   gl.enableVertexAttribArray(pos);
   gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
-  const uRes = gl.getUniformLocation(prog, "u_resolution"), uTime = gl.getUniformLocation(prog, "u_time");
-  const start = performance.now();
-  let last = 0, visible = true;
-  new IntersectionObserver(e => { visible = e[e.length - 1].isIntersecting; }, { rootMargin: "200px" }).observe(c);
-  const frame = now => {
-    requestAnimationFrame(frame);
-    if (!visible || now - last < 33) return;
-    last = now;
-    const w = Math.max(1, c.clientWidth), h = Math.max(1, c.clientHeight);
-    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; gl.viewport(0, 0, w, h); }
-    gl.uniform2f(uRes, w, h);
-    gl.uniform1f(uTime, (now - start) / 1000);
+  const uRes = gl.getUniformLocation(prog, "u_resolution"), uTime = gl.getUniformLocation(prog, "u_time"), uScale = gl.getUniformLocation(prog, "u_pixelScale");
+  const animation = visibleAnimation(c, time => {
+    gl.uniform1f(uTime, time / 1000);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-  };
-  requestAnimationFrame(frame);
+  }, 15);
+  // A bounded drawing buffer cuts shader work without changing dot spacing in CSS pixels.
+  const resize = new ResizeObserver(entries => {
+    const { width, height } = entries[0].contentRect;
+    const w = Math.max(1, width), h = Math.max(1, height), scale = Math.min(.65, 480 / w, 200 / h);
+    const bw = Math.max(1, Math.round(w * scale)), bh = Math.max(1, Math.round(h * scale));
+    if (c.width !== bw || c.height !== bh) { c.width = bw; c.height = bh; gl.viewport(0, 0, bw, bh); }
+    gl.uniform2f(uRes, w, h);
+    gl.uniform2f(uScale, w / bw, h / bh);
+    animation.refresh();
+  });
+  resize.observe(c);
+  addEventListener("pagehide", event => {
+    if (event.persisted) return;
+    resize.disconnect(); gl.deleteBuffer(buffer); gl.deleteProgram(prog);
+  });
 }
 
 /* ---------- globe packets ---------- */
 
-// The design animated the packets with SMIL <animate> on the gradients. Safari advances those values but
-// never repaints the strokes, so the packets stood still on iPhones; the same keyframes are played from JS.
 function globeAnim(svg) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const paths = svg.querySelectorAll(".packet"), grads = svg.querySelectorAll("radialGradient");
-  const nums = s => s.split(";").map(Number);
-  const tracks = ROUTES.map((r, i) => ({
-    dur: parseFloat(r.dur) * 1000,
-    times: nums(r.times),
-    keys: [[paths[i], "opacity", nums(r.opacity)], [grads[i], "cx", nums(r.cx)], [grads[i], "cy", nums(r.cy)], [grads[i], "r", nums(r.r)]]
-  }));
-  let visible = false;
-  new IntersectionObserver(e => { visible = e[e.length - 1].isIntersecting; }).observe(svg);
-  const frame = now => {
-    requestAnimationFrame(frame);
-    if (!visible) return;
-    for (const t of tracks) {
-      const p = now % t.dur / t.dur;
-      let k = 0;
-      while (k < t.times.length - 2 && p >= t.times[k + 1]) k++;
-      const f = (p - t.times[k]) / (t.times[k + 1] - t.times[k]);
-      for (const [el, attr, v] of t.keys) el.setAttribute(attr, (v[k] + (v[k + 1] - v[k]) * f).toFixed(2));
+  const paths = [...svg.querySelectorAll(".packet")];
+  const tracks = ROUTES.map((route, i) => {
+    const times = route.times.split(";").map(Number), opacity = route.opacity.split(";").map(Number);
+    return { path: paths[i], dur: parseFloat(route.dur) * 1000, end: times[opacity.lastIndexOf(1) + 1], offset: "", alpha: "" };
+  });
+  visibleAnimation(svg.closest(".globe"), time => {
+    for (const track of tracks) {
+      const progress = (time % track.dur) / track.dur / track.end;
+      const alpha = progress >= 1 ? "0" : Math.min(1, progress * 8, (1 - progress) * 8).toFixed(2);
+      if (alpha !== track.alpha) { track.path.setAttribute("opacity", alpha); track.alpha = alpha; }
+      if (alpha === "0" || alpha === "0.00") continue;
+      const offset = (-1000 * progress).toFixed(1);
+      if (offset !== track.offset) { track.path.setAttribute("stroke-dashoffset", offset); track.offset = offset; }
     }
-  };
-  requestAnimationFrame(frame);
+  });
+}
+
+// Pause the input border, routing dashes and BARS packets outside the viewport.
+function bindDecorativeMotion() {
+  const elements = [...document.querySelectorAll("#pbody,.branch,.bars-figure")];
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => entry.target.classList.toggle("is-motion-visible", entry.isIntersecting));
+  });
+  elements.forEach(element => { element.classList.add("motion-surface"); observer.observe(element); });
+  const sync = () => document.documentElement.classList.toggle("motion-paused", document.hidden || document.documentElement.classList.contains("modal-open"));
+  document.addEventListener("visibilitychange", sync);
+  document.addEventListener("alphy:motion", sync);
+  sync();
 }
 
 /* ---------- behaviour ---------- */
@@ -755,25 +830,41 @@ const setStats = (a, b) => { $("tps").textContent = a; $("tok").textContent = b;
 const refreshSend = () => { $("send").style.opacity = $("q").value.trim() ? "1" : "0.3"; };
 
 // Demo autoplay: types a question, streams a canned answer, repeats while the panel is visible.
-let autoStop = false, autoTyped = false, autoVisible = true, waitT = 0, segNodes = [];
-const wait = ms => new Promise(r => { waitT = setTimeout(r, ms); });
+let autoStop = false, autoTyped = false, autoVisible = false, waitT = 0, waitDone = null, autoWake = null, segNodes = [];
+const wait = ms => new Promise(resolve => {
+  waitDone = resolve;
+  waitT = setTimeout(() => { waitT = 0; waitDone = null; resolve(); }, ms);
+});
+const canAutoPlay = () => autoVisible && !document.hidden && panelMode !== "tab" && !document.documentElement.classList.contains("modal-open");
+
+function wakeAuto() {
+  if (autoWake && (autoStop || canAutoPlay())) { const resolve = autoWake; autoWake = null; resolve(); }
+}
 
 async function waitVisible() {
-  while (!autoStop && !autoVisible) await wait(400);
+  if (!autoStop && !canAutoPlay()) await new Promise(resolve => { autoWake = resolve; });
 }
 
 function stopAuto(clear) {
   autoStop = true;
   clearTimeout(waitT);
+  waitT = 0;
+  if (waitDone) { const resolve = waitDone; waitDone = null; resolve(); }
+  wakeAuto();
   if (clear && autoTyped) { $("q").value = ""; refreshSend(); }
   autoTyped = false;
 }
 
 function bindAuto() {
   if ("IntersectionObserver" in window) {
-    autoVisible = false;
-    new IntersectionObserver(e => { autoVisible = e[e.length - 1].isIntersecting; }, { threshold: 0.25 }).observe($("panel"));
+    new IntersectionObserver(entries => {
+      const entry = entries[entries.length - 1];
+      autoVisible = entry.isIntersecting && entry.intersectionRatio >= .25;
+      wakeAuto();
+    }, { threshold: .25 }).observe($("pmain"));
   }
+  document.addEventListener("visibilitychange", wakeAuto);
+  document.addEventListener("alphy:motion", wakeAuto);
   autoplay();
 }
 
@@ -787,6 +878,8 @@ async function autoplay() {
     await typeQuestion(d.q);
     if (autoStop) break;
     await wait(420);
+    await waitVisible();
+    if (autoStop) break;
     $("q").value = "";
     refreshSend();
     autoTyped = false;
@@ -802,6 +895,7 @@ async function typeQuestion(q) {
   autoTyped = true;
   input.value = "";
   for (let n = 1; n <= q.length; n++) {
+    await waitVisible();
     if (autoStop) return;
     input.value = q.slice(0, n);
     refreshSend();
@@ -848,11 +942,17 @@ async function streamAnswer(d) {
   const total = lens.reduce((a, b) => a + b, 0);
   const tps = d.tps || 340, rate = tps * 3.9;
   const inTok = Math.max(1, Math.round(d.q.length / 3.6));
-  const t0 = performance.now(), main = $("pmain");
-  let shown = 0;
+  const main = $("pmain");
+  let shown = 0, elapsed = 0;
   while (shown < total && !autoStop) {
+    await waitVisible();
+    if (autoStop) break;
+    const before = performance.now();
     await wait(40);
-    shown = Math.min(total, Math.round((performance.now() - t0) / 1000 * rate));
+    if (autoStop) break;
+    if (!canAutoPlay()) continue;
+    elapsed += performance.now() - before;
+    shown = Math.min(total, Math.round(elapsed / 1000 * rate));
     let rem = shown;
     for (let i = 0; i < d.segs.length; i++) {
       const take = Math.max(0, Math.min(lens[i], rem));
@@ -992,6 +1092,8 @@ function setPanelMode(mode) {
   const p = $("panel"), slot = $("slot"), body = $("pbody"), label = $("vlabel"), s = p.style;
   if (mode === panelMode) return;
   panelMode = mode;
+  body.classList.toggle("is-collapsed", mode === "tab");
+  wakeAuto();
   // Every section is its own z-index:1 stacking context, so a docked panel would sit under later
   // sections (as it did in the design); lift the hero section above them while docked.
   slot.closest("section").style.zIndex = mode === "flow" ? "" : "150";
@@ -1101,7 +1203,10 @@ const closeMenus = () => $$(".ddm").forEach(m => m.classList.remove("open"));
 
 function openModal(id, on) {
   show($(id), on);
-  document.body.style.overflow = on ? "hidden" : "";
+  const open = ["modal", "login"].some(key => $(key).style.display === "block");
+  document.body.style.overflow = open ? "hidden" : "";
+  document.documentElement.classList.toggle("modal-open", open);
+  document.dispatchEvent(new Event("alphy:motion"));
   if (!on && id === "login") show($("lerr"), false);
 }
 
@@ -1363,6 +1468,7 @@ function mount() {
   bindChart();
   bindBars();
   bindActivity();
+  bindDecorativeMotion();
   if (!SHOW_DEMO_ANSWER) showNotice();
   if (!API_ENDPOINT.trim()) bindAuto();
   // The markup arrives after load, so jump to a #section from the URL by hand (without smooth scrolling).
