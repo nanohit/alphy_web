@@ -17,7 +17,10 @@ FAMILIES = {
     'claude-haiku-5-5': 'anthropic/claude-haiku-5.5',
     'gpt-6-1-sol': 'openai/gpt-6.1-sol',
     'gpt-6-astra': 'openai/gpt-6-astra',
+    'gpt-6-luna': 'openai/gpt-6-luna',
     'gemini-4-argon': 'google/gemini-4-argon',
+    'grok-4-7': 'xai/grok-4.7',
+    'muse-wonder': 'meta/muse-wonder',
     'mistral-large-4': 'mistral/mistral-large-4',
 }
 

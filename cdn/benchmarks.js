@@ -10,8 +10,18 @@ export const BENCHMARK_VIEWS = [
   { id: 'cost-total', title: 'Стоимость прогона', tab: 'Стоимость прогона', metric: 'costTotal', axis: 'Стоимость всего прогона · ₽' }
 ];
 const EFFORTS = { none: 'Без рассуждения', low: 'Низкий', medium: 'Средний', high: 'Высокий', xhigh: 'Очень высокий', max: 'Максимальный', default: 'По умолчанию' };
-const COLORS = ['#EDEDED', '#A8A8A8', '#D0D0D0', '#808080', '#BBBBBB', '#939393', '#DDDDDD', '#707070'];
-const SHORT_NAMES = ['Opus', 'Sonnet', 'Fable', 'Haiku', 'Sol', 'Astra', 'Argon', 'Mistral'];
+const TITLE = 'Стоимость и качество под ваши задачи, через API Alphy.';
+// Slopalytics' dark-theme family colors; symbols distinguish nearby shades.
+const MODEL_STYLES = {
+  'claude-opus-5.5': ['#df9477', 'Opus'], 'claude-sonnet-5.5': ['#f0b99f', 'Sonnet'],
+  'claude-fable-5.1': ['#cc785c', 'Fable'], 'claude-haiku-5.5': ['#b98a74', 'Haiku'],
+  'gpt-6.1-sol': ['#c5cbd3', 'Sol'], 'gpt-6-astra': ['#f1f3f5', 'Astra'],
+  'gpt-6-luna': ['#939daa', 'Luna'], 'gemini-4-argon': ['#56ca80', 'Argon'],
+  'grok-4.7': ['#9b94ee', 'Grok'], 'muse-wonder': ['#94c4ff', 'Muse'],
+  'mistral-large-4': ['#ff8b45', 'Mistral']
+};
+const LAB_NAMES = { google: 'Google', openai: 'OpenAI', anthropic: 'Anthropic', xai: 'xAI' };
+const labLogo = lab => LAB_NAMES[lab] ? `<img class="bench-lab-logo" src="${new URL('./logos/' + lab + '.svg', import.meta.url)}" alt="${LAB_NAMES[lab]}" width="16" height="16" loading="lazy">` : '';
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const number = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
 const money = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -78,11 +88,13 @@ const symbol = (index, size = 4) => {
 };
 
 export function mountBenchmarks(section, options) {
-  const models = [...new Set(BENCHMARK_DATA.points.map(p => p.model))].map((id, i) => ({
-    id, index: i, color: COLORS[i % COLORS.length], name: BENCHMARK_DATA.points.find(p => p.model === id).name
-  }));
+  const models = [...new Set(BENCHMARK_DATA.points.map(p => p.model))].map((id, i) => {
+    const [lab, slug] = id.split('/'), [color, short] = MODEL_STYLES[slug] || ['#a4adb9', slug];
+    return { id, index: i, lab, color, short, name: BENCHMARK_DATA.points.find(p => p.model === id).name,
+      fallback: BENCHMARK_DATA.points.some(p => p.model === id && p.fallback) };
+  });
   const state = { view: BENCHMARK_VIEWS[0], scale: 'log', type: 'bars', pareto: false, effort: 'all', models: new Set(models.map(m => m.id)), pinned: null, highlighted: null };
-  let points = [], layouts = [], width = 0, svg = null, current = null, now = new Date(), disposed = false;
+  let points = [], layouts = [], width = 0, svg = null, current = null, now = new Date(), disposed = false, pointerType = 'mouse';
   let cachedCatalog = options.getCatalog(now);
   const priced = () => BENCHMARK_DATA.points.map(p => {
     const model = cachedCatalog.find(m => m.name === p.model);
@@ -91,7 +103,8 @@ export function mountBenchmarks(section, options) {
   const isScatter = () => state.view.scatter || state.view.optionalScatter && state.type === 'scatter';
   const metricText = (metric, value, axis = false) => value == null ? '—' : metric === 'cost' || metric === 'costTotal' ? (axis ? compact(value) : money.format(value)) + ' ₽'
     : metric === 'time' ? timeText(value) : compact(value);
-  section.innerHTML = `<div class="bench-heading"><h2 id="model-benchmarks-title">${state.view.title}</h2><span class="bench-price-label" title="${escape(options.priceNote)}">Цены API Alphy · ₽</span></div>
+  const openingDate = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
+  section.innerHTML = `<div class="bench-heading"><h2 id="model-benchmarks-title">${TITLE}</h2><span class="bench-price-label" title="${escape(options.priceNote)}">Цены API Alphy · ₽</span></div>
 <div class="bench-frame">
 <div class="bench-tabs" role="tablist" aria-label="Показатель сравнения">${BENCHMARK_VIEWS.map((view, i) => `<button type="button" role="tab" id="bench-tab-${view.id}" data-bench-view="${view.id}" aria-controls="bench-panel" aria-selected="${!i}" tabindex="${i ? -1 : 0}">${view.tab}</button>`).join('')}</div>
 <div class="bench-body">
@@ -106,12 +119,12 @@ export function mountBenchmarks(section, options) {
 </div>
 <aside class="bench-models" aria-label="Выбор моделей"><div class="bench-models-heading"><span>Модели</span><button type="button" class="bench-select-all">Все</button></div>
 <label class="bench-effort-label" for="bench-effort">Уровень рассуждения</label><select id="bench-effort"><option value="all">Все уровни</option>${Object.entries(EFFORTS).filter(([key]) => BENCHMARK_DATA.points.some(point => point.effort === key)).map(([key,label]) => `<option value="${key}">${label}</option>`).join('')}</select>
-<div class="bench-model-list">${models.map(m => `<button type="button" data-bench-model="${m.id}" aria-pressed="true"><svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true" style="color:${m.color}">${symbol(m.index, 3)}</svg><span>${escape(m.name)}</span></button>`).join('')}</div>
+<div class="bench-model-list">${models.map(m => `<button type="button" data-bench-model="${m.id}" aria-pressed="true" style="--model-color:${m.color}"><svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true" style="color:${m.color}">${symbol(m.index, 3)}</svg><span>${escape(m.name.replace('Claude ', ''))}${m.fallback ? '<small title="Замер Artificial Analysis в режиме default fallback"> · fallback</small>' : ''}</span>${labLogo(m.lab)}</button>`).join('')}</div>
 </aside>
 </div>
-<div class="bench-footer"><span>Оценки, токены, время — <a href="${BENCHMARK_DATA.methodology}" target="_blank" rel="noreferrer">Artificial Analysis</a> · ${BENCHMARK_DATA.date.split('-').reverse().join('.')}</span><span title="${escape(options.priceNote)}">Расчёт по ценам API Alphy</span></div>
+<div class="bench-footer"><span>Оценки, токены, время — <a href="${BENCHMARK_DATA.methodology}" target="_blank" rel="noreferrer" title="Снимок результатов: ${BENCHMARK_DATA.date.split('-').reverse().join('.')}">Artificial Analysis</a> · <time title="Дата просмотра">${openingDate}</time></span><span title="${escape(options.priceNote)}">Расчёт по ценам API Alphy</span></div>
 </div>`;
-  const title = section.querySelector('h2'), panel = section.querySelector('#bench-panel'), plot = section.querySelector('.bench-plot');
+  const panel = section.querySelector('#bench-panel'), plot = section.querySelector('.bench-plot');
   const svgContainer = section.querySelector('.bench-svg'), tip = section.querySelector('.bench-tooltip');
   const bottom = section.querySelector('.bench-axis-bottom'), heading = section.querySelector('.bench-axis-heading');
   const scaleControl = section.querySelector('.bench-scale'), typeControl = section.querySelector('.bench-type'), paretoControl = section.querySelector('.bench-pareto');
@@ -126,6 +139,7 @@ export function mountBenchmarks(section, options) {
     if (current) current.setAttribute('data-active', 'false');
     current = null;
     tip.hidden = true;
+    tip.classList.remove('is-pinned');
     svg?.querySelector('.bench-crosshair')?.setAttribute('visibility', 'hidden');
     setHighlight(null);
   };
@@ -144,10 +158,12 @@ export function mountBenchmarks(section, options) {
     if (current) current.setAttribute('data-active', 'false');
     current = svg.querySelector(`[data-point="${id}"]`);
     current.setAttribute('data-active', 'true');
-    tip.innerHTML = `<div class="bench-tip-heading"><div><strong>${escape(point.name)}</strong><span>${EFFORTS[point.effort] || 'По умолчанию'}${point.fallback ? ' · с резервной моделью' : ''}</span></div><button type="button" aria-label="Закрыть информацию о модели">×</button></div>${tooltipRows(point)}<div class="bench-tip-price">Цены API Alphy</div>`;
+    tip.classList.toggle('is-pinned', !!state.pinned);
+    tip.innerHTML = `<div class="bench-tip-heading"><div><strong>${escape(point.name)}</strong><span>${EFFORTS[point.effort] || 'По умолчанию'}${point.fallback ? ' · default fallback' : ''}</span></div>${state.pinned ? '<button type="button" aria-label="Закрыть информацию о модели">×</button>' : ''}</div>${tooltipRows(point)}<div class="bench-tip-price">Цены API Alphy</div>`;
     tip.hidden = false;
-    const x = Math.max(10, Math.min(width - tip.offsetWidth - 10, layout.x < width / 2 ? layout.x + 18 : layout.x - tip.offsetWidth - 18));
-    const y = Math.max(32, Math.min(plot.clientHeight - tip.offsetHeight - 10, layout.y + 16));
+    // Hover details never intercept the mouse; keep them in the opposite corner.
+    const x = layout.x < width / 2 ? width - tip.offsetWidth - 10 : 10;
+    const y = layout.y < plot.clientHeight / 2 ? plot.clientHeight - tip.offsetHeight - 10 : 10;
     tip.style.left = x + 'px'; tip.style.top = y + 'px';
     const cross = svg.querySelector('.bench-crosshair');
     if (cross && isScatter()) {
@@ -159,15 +175,17 @@ export function mountBenchmarks(section, options) {
   const render = () => {
     if (disposed || !width) return;
     unpin(); hideTip();
-    points = priced().filter(p => state.models.has(p.model) && (state.effort === 'all' || p.effort === state.effort) && p[state.view.metric] != null);
-    const scatter = isScatter(), mobile = width < 580, height = mobile ? 330 : 410;
-    const margin = { left: scatter ? 38 : mobile ? 67 : 80, right: mobile ? 14 : 22, top: 24, bottom: scatter ? 36 : 50 };
+    const context = priced().filter(p => state.models.has(p.model) && p[state.view.metric] != null);
+    points = context.filter(p => state.effort === 'all' || p.effort === state.effort);
+    const scatter = isScatter(), mobile = width < 580, horizontal = !scatter && mobile;
+    const groups = models.filter(m => points.some(p => p.model === m.id));
+    const height = horizontal ? Math.max(250, groups.length * 38 + 52) : mobile ? 330 : 410;
+    const margin = { left: scatter ? 38 : mobile ? 67 : 80, right: mobile ? 14 : 22, top: 24, bottom: scatter ? 36 : horizontal ? 28 : 50 };
     const chartWidth = width-margin.left-margin.right, chartHeight = height-margin.top-margin.bottom;
     plot.dataset.left = margin.left; plot.style.height = height + 'px';
-    title.textContent = state.view.title;
     panel.setAttribute('aria-labelledby', 'bench-tab-' + state.view.id);
     heading.textContent = scatter ? 'Индекс качества' : state.view.axis;
-    bottom.textContent = scatter ? state.view.axis : 'Модели';
+    bottom.textContent = scatter || horizontal ? state.view.axis : 'Модели';
     bottom.title = scatter && state.view.metric === 'time' ? 'Среднее время генерации в исходном замере, без TTFT и сетевых задержек. Это метрика Artificial Analysis.' : '';
     scaleControl.hidden = !scatter; typeControl.hidden = !state.view.optionalScatter; paretoControl.hidden = !scatter;
     tabs.forEach(tab => { const on = tab.dataset.benchView === state.view.id; tab.setAttribute('aria-selected', on); tab.tabIndex = on ? 0 : -1; });
@@ -180,22 +198,26 @@ export function mountBenchmarks(section, options) {
       svgContainer.innerHTML = `<p class="bench-empty">${state.models.size ? 'Для этого показателя и уровня нет данных.' : 'Выберите модель для сравнения.'}</p>`;
       return;
     }
-    let axes = '', grid = '', series = '', frontier = '';
+    let axes = '', grid = '', series = '', frontier = '', shade = '';
     layouts = [];
     const formatAxis = value => state.view.metric === 'time'
       ? number.format(value < 60 ? value : value / 60) + (value < 60 ? ' с' : ' мин')
       : !scatter && (state.view.metric === 'cost' || state.view.metric === 'costTotal')
         ? compact(value) : metricText(state.view.metric, value, true);
+    const efficient = scatter && state.pareto ? benchmarkPareto(points, state.view.metric) : [];
+    const efficientIds = new Set(efficient.map(p => p.id));
     const pointMarkup = (p, x, y, shape) => {
       layouts.push({id:p.id,x,y});
-      const label = `${p.name}, ${EFFORTS[p.effort] || 'По умолчанию'}, ${state.view.axis}: ${metricText(state.view.metric,p[state.view.metric])}, индекс качества ${number.format(p.intelligence)}`;
-      return `<g class="bench-point" data-point="${p.id}" role="button" tabindex="${layouts.length === 1 ? 0 : -1}" aria-label="${escape(label)}" aria-pressed="false" transform="translate(${x} ${y})">${shape}</g>`;
+      const label = `${p.name}, ${EFFORTS[p.effort] || 'По умолчанию'}${p.fallback ? ', default fallback' : ''}, ${state.view.axis}: ${metricText(state.view.metric,p[state.view.metric])}, индекс качества ${number.format(p.intelligence)}`;
+      return `<g class="bench-point${scatter && state.pareto && !efficientIds.has(p.id) ? ' is-dominated' : ''}" data-point="${p.id}" role="button" tabindex="${layouts.length === 1 ? 0 : -1}" aria-label="${escape(label)}" aria-pressed="false" transform="translate(${x} ${y})">${shape}</g>`;
     };
     if (scatter) {
-      const values = points.map(p=>p[state.view.metric]).filter(v=>v>0);
+      // Keep each model's full reasoning trajectory and stable axes when filtering levels.
+      const visibleContext = context.filter(p => groups.some(m => m.id === p.model));
+      const values = visibleContext.map(p=>p[state.view.metric]).filter(v=>v>0);
       const domain = state.scale === 'log' ? logDomain(values, chartWidth) : linearDomain(Math.max(...values),Math.max(3,Math.floor(chartWidth/120)));
       const coordinate = value => margin.left + chartWidth * (state.scale === 'log' ? Math.log(value/domain.min)/Math.log(domain.max/domain.min) : value/domain.max);
-      const minY = Math.max(0, Math.floor(Math.min(...points.map(p=>p.intelligence))/10)*10-10), maxY = Math.ceil(Math.max(...points.map(p=>p.intelligence))/10)*10;
+      const minY = Math.max(0, Math.floor(Math.min(...visibleContext.map(p=>p.intelligence))/10)*10-10), maxY = Math.ceil(Math.max(...visibleContext.map(p=>p.intelligence))/10)*10;
       const yCoordinate = value => margin.top + chartHeight * (1-(value-minY)/(maxY-minY));
       for (let value=minY;value<=maxY;value+=10) {
         const y = yCoordinate(value);
@@ -207,36 +229,55 @@ export function mountBenchmarks(section, options) {
         grid += `<path d="M${x} ${margin.top}V${height-margin.bottom}"/>`;
         axes += `<text x="${x}" y="${height-12}" text-anchor="${x>width-60?'end':x<60?'start':'middle'}">${escape(formatAxis(value))}</text>`;
       });
-      models.filter(m=>state.models.has(m.id)).forEach(model => {
+      groups.forEach(model => {
         const group = points.filter(p=>p.model===model.id).sort((a,b)=>a.effortOrder-b.effortOrder);
-        series += `<g data-bench-series="${model.id}" style="color:${model.color}"><path class="bench-line" d="${group.map((p,i)=>(i?'L':'M')+coordinate(p[state.view.metric])+' '+yCoordinate(p.intelligence)).join(' ')}"/>${group.map(p=>pointMarkup(p,coordinate(p[state.view.metric]),yCoordinate(p.intelligence),`<circle class="bench-hit" r="11"/>${symbol(model.index)}`)).join('')}</g>`;
+        const trajectory = visibleContext.filter(p=>p.model===model.id).sort((a,b)=>a.effortOrder-b.effortOrder);
+        const lines = trajectory.slice(1).map((p,i) => `<path class="bench-line${state.effort !== 'all' ? ' is-context' : ''}${state.pareto && (!efficientIds.has(p.id) || !efficientIds.has(trajectory[i].id)) ? ' is-dominated' : ''}" d="M${coordinate(trajectory[i][state.view.metric])} ${yCoordinate(trajectory[i].intelligence)}L${coordinate(p[state.view.metric])} ${yCoordinate(p.intelligence)}"/>`).join('');
+        series += `<g data-bench-series="${model.id}" style="color:${model.color}">${lines}${group.map(p=>pointMarkup(p,coordinate(p[state.view.metric]),yCoordinate(p.intelligence),`<circle class="bench-hit" r="11"/>${symbol(model.index)}`)).join('')}</g>`;
       });
-      if (state.pareto) {
-        const efficient = benchmarkPareto(points, state.view.metric);
-        frontier = `<path class="bench-frontier" d="${efficient.map((p,i)=>(i?'L':'M')+coordinate(p[state.view.metric])+' '+yCoordinate(p.intelligence)).join(' ')}"/>`;
+      if (efficient.length) {
+        // A step frontier shades precisely the dominated region, including equal-quality, dearer points.
+        const path = efficient.map((p,i)=>(i?'H':'M')+coordinate(p[state.view.metric])+(i?'V':' ')+yCoordinate(p.intelligence)).join(' ') + `H${width-margin.right}`;
+        frontier = `<path class="bench-frontier" d="${path}"/>`;
+        shade = `<path class="bench-dominated-area" d="M${coordinate(efficient[0][state.view.metric])} ${height-margin.bottom}L${path.slice(1)}V${height-margin.bottom}Z" aria-hidden="true"/>`;
       }
     } else {
-      const domain = linearDomain(Math.max(...points.map(p=>p[state.view.metric])), 4);
+      const domain = linearDomain(Math.max(...points.map(p=>p[state.view.metric])), horizontal ? 2 : 4);
       domain.ticks.forEach(value => {
-        const y = margin.top + chartHeight*(1-value/domain.max);
-        grid += `<path d="M${margin.left} ${y}H${width-margin.right}"/>`;
-        axes += `<text x="${margin.left-10}" y="${y+4}" text-anchor="end">${escape(formatAxis(value))}</text>`;
+        if (horizontal) {
+          const x = margin.left + chartWidth*value/domain.max;
+          grid += `<path d="M${x} ${margin.top}V${height-margin.bottom}"/>`;
+          axes += `<text x="${x}" y="${height-9}" text-anchor="${value===0?'start':value===domain.max?'end':'middle'}">${escape(formatAxis(value))}</text>`;
+        } else {
+          const y = margin.top + chartHeight*(1-value/domain.max);
+          grid += `<path d="M${margin.left} ${y}H${width-margin.right}"/>`;
+          axes += `<text x="${margin.left-10}" y="${y+4}" text-anchor="end">${escape(formatAxis(value))}</text>`;
+        }
       });
-      const groups = models.filter(m=>points.some(p=>p.model===m.id)), groupWidth = chartWidth/groups.length;
+      const groupSize = (horizontal ? chartHeight : chartWidth)/groups.length;
       groups.forEach((model, i) => {
-        const group = points.filter(p=>p.model===model.id).sort((a,b)=>a.effortOrder-b.effortOrder), start = margin.left + i*groupWidth;
-        const slot = (groupWidth-Math.min(16,groupWidth*.2))/group.length, barWidth=Math.max(2,slot*.75);
+        const group = points.filter(p=>p.model===model.id).sort((a,b)=>a.effortOrder-b.effortOrder);
+        const slot = (groupSize-Math.min(16,groupSize*.2))/group.length, barSize=Math.max(2,slot*.75);
         const content = group.map((p,j)=> {
-          const x = start + (groupWidth-slot*group.length)/2 + slot*(j+.5), h = chartHeight*p[state.view.metric]/domain.max, y=margin.top+chartHeight-h;
-          return pointMarkup(p,x,y,`<rect class="bench-hit" x="${-Math.max(10,barWidth)/2}" y="-4" width="${Math.max(10,barWidth)}" height="${h+8}"/><rect class="bench-bar" x="${-barWidth/2}" width="${barWidth}" height="${h}" style="fill-opacity:${.5+j*.5/Math.max(1,group.length-1)}"/>`);
+          const offset = i*groupSize+(groupSize-slot*group.length)/2+slot*(j+.5);
+          const length = (horizontal ? chartWidth : chartHeight)*p[state.view.metric]/domain.max;
+          const x = horizontal ? margin.left+length : margin.left+offset;
+          const y = horizontal ? margin.top+offset : margin.top+chartHeight-length;
+          const hit = horizontal ? `x="${-length}" y="${-Math.max(5,barSize)/2}" width="${length+4}" height="${Math.max(5,barSize)}"` : `x="${-Math.max(10,barSize)/2}" y="-4" width="${Math.max(10,barSize)}" height="${length+8}"`;
+          const bar = horizontal ? `x="${-length}" y="${-barSize/2}" width="${length}" height="${barSize}"` : `x="${-barSize/2}" width="${barSize}" height="${length}"`;
+          return pointMarkup(p,x,y,`<rect class="bench-hit" ${hit}/><rect class="bench-bar" ${bar} style="fill-opacity:${.5+j*.5/Math.max(1,group.length-1)}"/>`);
         }).join('');
         series += `<g data-bench-series="${model.id}" style="color:${model.color}">${content}</g>`;
-        const label = mobile || groupWidth < 100 ? SHORT_NAMES[model.index] : model.name.replace('Claude ','');
-        const words = label.split(' '), half = words.length>2?Math.ceil(words.length/2):words.length;
-        axes += `<text class="bench-model-axis" x="${start+groupWidth/2}" y="${height-margin.bottom+19+(mobile&&i%2?15:0)}" text-anchor="middle"><tspan x="${start+groupWidth/2}">${escape(words.slice(0,half).join(' '))}</tspan>${half<words.length?`<tspan x="${start+groupWidth/2}" dy="15">${escape(words.slice(half).join(' '))}</tspan>`:''}</text>`;
+        if (horizontal) {
+          axes += `<text class="bench-model-axis" x="${margin.left-10}" y="${margin.top+(i+.5)*groupSize+4}" text-anchor="end" style="fill:${model.color}">${escape(model.short)}</text>`;
+        } else {
+          const label = groupSize < 100 ? model.short : model.name.replace('Claude ','');
+          const words = label.split(' '), half = words.length>2?Math.ceil(words.length/2):words.length;
+          axes += `<text class="bench-model-axis" x="${margin.left+(i+.5)*groupSize}" y="${height-margin.bottom+19}" text-anchor="middle" style="fill:${model.color}"><tspan x="${margin.left+(i+.5)*groupSize}">${escape(words.slice(0,half).join(' '))}</tspan>${half<words.length?`<tspan x="${margin.left+(i+.5)*groupSize}" dy="15">${escape(words.slice(half).join(' '))}</tspan>`:''}</text>`;
+        }
       });
     }
-    svgContainer.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="${escape(state.view.title)}"><g class="bench-grid" aria-hidden="true">${grid}</g><g class="bench-axis" aria-hidden="true">${axes}</g>${frontier}<path class="bench-crosshair" visibility="hidden" aria-hidden="true"/>${series}</svg>`;
+    svgContainer.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="${escape(state.view.title)}"><g class="bench-grid" aria-hidden="true">${grid}</g>${shade}<g class="bench-axis" aria-hidden="true">${axes}</g><path class="bench-crosshair" visibility="hidden" aria-hidden="true"/>${series}${frontier}</svg>`;
     svg = svgContainer.querySelector('svg');
   };
   const nearestPoint = event => {
@@ -249,18 +290,23 @@ export function mountBenchmarks(section, options) {
     return nearest;
   };
   plot.addEventListener('pointermove', event => {
-    if (event.pointerType === 'touch' || state.pinned || tip.contains(event.target)) return;
+    if (event.pointerType === 'touch') return;
+    if (state.pinned) { unpin(); hideTip(); }
     const id = nearestPoint(event);
     if (id && current?.dataset.point !== id) showPoint(id);
     else if (!id) hideTip();
   });
   plot.addEventListener('pointerleave', () => { if (!state.pinned) hideTip(); });
+  plot.addEventListener('pointerdown', event => { pointerType = event.pointerType || 'mouse'; });
   plot.addEventListener('click', event => {
     if (tip.contains(event.target)) return;
     const id=nearestPoint(event);
     if (!id) {unpin();hideTip();return;}
-    if(state.pinned===id){unpin();hideTip();return;}
-    unpin();state.pinned=id;showPoint(id);current.setAttribute('aria-pressed','true');
+    // Only touch and explicit keyboard activation pin details. Desktop clicks stay transient.
+    if(event.pointerType==='touch' || !event.pointerType && pointerType==='touch' || event.detail===0){
+      if(state.pinned===id){unpin();hideTip();return;}
+      unpin();state.pinned=id;showPoint(id);current.setAttribute('aria-pressed','true');
+    } else { unpin();showPoint(id); }
   });
   plot.addEventListener('focusin',event => { const point=event.target.closest('[data-point]');if(point)showPoint(point.dataset.point); });
   plot.addEventListener('focusout',event => {if(!state.pinned && !plot.contains(event.relatedTarget))hideTip();});

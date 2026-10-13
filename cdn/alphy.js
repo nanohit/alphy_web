@@ -25,6 +25,7 @@ const moscowDay = (now = new Date()) => {
 // platform.claude.com/docs/en/about-claude/pricing (5-minute cache writes)
 // docs.mistral.ai/models/mistral-large (current public-preview prices)
 // Other text models: openrouter.ai/api/v1/models; media: docs.x.ai and docs.bfl.ai.
+// GPT-6 Luna, Grok 4.7 and Muse Wonder: official model/pricing docs, checked 2026-10-14.
 // Gemini 4 Argon: ai.google.dev/gemini-api/docs/pricing, checked 2026-10-14.
 // Claude Haiku prices below apply to prompts up to 100K tokens.
 const USD_RUB = 84.9048; // CBR USD rate for 2026-10-10, effective on 2026-10-11.
@@ -40,6 +41,9 @@ const modelPricing = (model, now = new Date()) => model.priceAfter && moscowDay(
 
 // Curated public pricing snapshot, checked 2026-10-11. Sources/conditions are stored per model.
 const MODELS = [
+  {"mark": "OA", "prov": "openai", "name": "openai/gpt-6-luna", "context": "1.05M", "input": "$0.1/M", "inp": 0.1, "output": "$0.5/M", "cacheRead": "$0.01/M", "cacheWrite": "$0.125/M", "web": "$10/K", "priceSource": "https://developers.openai.com/api/docs/models/gpt-6-luna", "priceNote": "Базовый тариф до 272 000 входных токенов. Для более длинного контекста input и cache read ×2, output ×1,5. Cache Write — запись на 5 минут.", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"]},
+  {"mark": "XA", "prov": "xai", "name": "xai/grok-4.7", "context": "500K", "input": "$2/M", "inp": 2, "output": "$6/M", "cacheRead": "$0.5/M", "cacheWrite": "—", "web": "$5/K", "priceSource": "https://docs.x.ai/developers/pricing", "priceNote": "Базовый тариф для промптов короче 200 000 токенов. От 200 000 токенов input, cache read и output ×2. Web Search — за 1 000 вызовов, дополнительно оплачиваются токены.", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"]},
+  {"mark": "ME", "prov": "meta", "name": "meta/muse-wonder", "context": "1M", "input": "$4/M", "inp": 4, "output": "$20/M", "cacheRead": "$0.2/M", "cacheWrite": "—", "web": "$2.5/K", "priceSource": "https://dev.meta.ai/docs/pricing-rate-limits", "priceNote": "Muse Wonder 1.0, Standard mode (preview). Единый тариф для всех длин контекста и уровней рассуждения. Contributor mode недоступен. Web search — за 1 000 поисковых запросов, дополнительно оплачиваются токены.", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"]},
   {"mark": "GO", "prov": "google", "name": "google/gemini-4-argon", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2, "output": "$10/M", "cacheRead": "$0.1/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image", "Video", "Audio"], "priceSource": "https://ai.google.dev/gemini-api/docs/pricing#gemini-4-argon", "priceNote": "Standard: вводный тариф до 30.11.2026 включительно; с 01.12.2026 input, output и cache read удваиваются. Output включает thinking-токены. Кэш только implicit, отдельной записи нет. Google Search: 5 000 бесплатных запросов в месяц суммарно для Gemini 3 и новее, затем ставка за каждую поисковую query. Контекст 1 048 576 токенов общий для input, thinking и output; синхронный output до 65 536, long decode до 1M. Только текстовый output.", "priceAfter": {"from": "2026-12-01", "input": "$4/M", "inp": 4, "output": "$20/M", "cacheRead": "$0.2/M"}},
   {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-haiku-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.1/M", "inp": 0.1, "output": "$0.5/M", "cacheRead": "$0.01/M", "cacheWrite": "$0.125/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 100 000 токенов; длинный контекст оплачивается по другой ставке."},
   {"mark": "MI", "prov": "mistral", "name": "mistral/mistral-large-4", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.68/M", "inp": 0.68, "output": "$2.09/M", "cacheRead": "$0.07/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
@@ -150,7 +154,7 @@ const DEMOS = [
   }
 ];
 
-const FEATURED = ["google/gemini-4-argon", "anthropic/claude-haiku-5.5", "mistral/mistral-large-4", "openai/gpt-6.1-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1", "anthropic/claude-sonnet-5.5"];
+const FEATURED = ["meta/muse-wonder", "openai/gpt-6-luna", "xai/grok-4.7", "google/gemini-4-argon", "anthropic/claude-haiku-5.5", "mistral/mistral-large-4", "openai/gpt-6.1-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1", "anthropic/claude-sonnet-5.5"];
 const SORT_LABELS = { release: "по дате", latency: "по latency", throughput: "по throughput", input: "по цене input" };
 const PROV_LABELS = { all: "Все провайдеры", openai: "OpenAI", anthropic: "Anthropic", google: "Google", meta: "Meta", xai: "xAI", deepseek: "DeepSeek", alibaba: "Alibaba", moonshotai: "Moonshot AI", thinkingmachines: "Thinking Machines", mistral: "Mistral", cohere: "Cohere", bfl: "Black Forest Labs", bytedance: "ByteDance", perplexity: "Perplexity", prodia: "Prodia", quiverai: "QuiverAI", sakana: "Sakana AI", poolside: "Poolside", minimax: "MiniMax", kwaipilot: "Kwaipilot", inclusionai: "InclusionAI", fishaudio: "Fish Audio" };
 
@@ -310,6 +314,7 @@ const DIAGS = [
 
 const NEWS = [
   ["14 октября", "Gemini 4 Argon теперь доступен на Alphy Gateway"],
+  ["13 октября", "Muse Wonder теперь доступен на Alphy Gateway"],
   ["7 октября", "Claude Haiku 5.5 теперь доступен на Alphy Gateway"],
   ["6 октября", "Mistral Large 4 теперь доступен на Alphy Gateway"]
 ];
@@ -642,7 +647,7 @@ const page = () => `
 </section>
 
 <section id="api" class="wrap st">
-<div class="g3 news">${map(NEWS, ([d, t]) => `<article><div class="nd"><span>${d}</span><span>Changelog</span></div><div class="nt">${t}</div></article>`)}</div>
+<div class="g4 news">${map(NEWS, ([d, t]) => `<article><div class="nd"><span>${d}</span><span>Changelog</span></div><div class="nt">${t}</div></article>`)}</div>
 <h2 class="h2c">Один API для всех моделей</h2>
 <div class="tbl" id="tbl">
 <div class="tbar">
@@ -663,7 +668,7 @@ const page = () => `
 </section>
 
 <section id="model-benchmarks" class="wrap st model-benchmarks" aria-labelledby="model-benchmarks-title">
-<h2 id="model-benchmarks-title">Стоимость и качество</h2>
+<h2 id="model-benchmarks-title">Стоимость и качество под ваши задачи, через API Alphy.</h2>
 <div class="bench-loading" role="status">Загрузка сравнения моделей…</div>
 </section>
 
