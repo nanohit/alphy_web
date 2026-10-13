@@ -10,6 +10,14 @@ const BASE = ((document.currentScript || {}).src || "").replace(/[^/]*$/, "");
 const API_ENDPOINT = "";       // POST {prompt, stream:false} → the panel shows the answer; empty → Groq
 const SHOW_DEMO_ANSWER = true; // false → the panel starts with the "API не подключён" notice
 
+const DAY_MS = 86400000;
+const moscowDateFormat = new Intl.DateTimeFormat("en", { timeZone: "Europe/Moscow", year: "numeric", month: "numeric", day: "numeric" });
+const moscowDay = (now = new Date()) => {
+  const parts = moscowDateFormat.formatToParts(now);
+  const part = key => Number(parts.find(p => p.type === key).value);
+  return Date.UTC(part("year"), part("month") - 1, part("day"));
+};
+
 /* ---------- catalog and presentation data ---------- */
 
 // Pricing sources (checked 2026-10-11):
@@ -17,15 +25,21 @@ const SHOW_DEMO_ANSWER = true; // false → the panel starts with the "API не 
 // platform.claude.com/docs/en/about-claude/pricing (5-minute cache writes)
 // docs.mistral.ai/models/mistral-large (current public-preview prices)
 // Other text models: openrouter.ai/api/v1/models; media: docs.x.ai and docs.bfl.ai.
+// Gemini 4 Argon: ai.google.dev/gemini-api/docs/pricing, checked 2026-10-14.
 // Claude Haiku prices below apply to prompts up to 100K tokens.
 const USD_RUB = 84.9048; // CBR USD rate for 2026-10-10, effective on 2026-10-11.
+const PRICE_MULTIPLIER = 1.135;
 const rubleNumber = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const rublePrice = value => value === "Free" ? "0 ₽" : value.replace(/\$([\d.]+)\s*\/\s*(.*)/, (_, amount, unit) =>
-  rubleNumber.format(Number(amount) * USD_RUB) + " ₽/" + unit);
-const PRICE_NOTE = "Публичные тарифы на 11.10.2026, в рублях по курсу ЦБ на 10.10.2026: 84,9048 ₽ за $1. M — миллион токенов, K — тысяча запросов. Указаны базовые режимы; «от» — минимальная ставка. Cache Write — запись на 5 минут, где она тарифицируется отдельно.";
+  rubleNumber.format(Number(amount) * USD_RUB * PRICE_MULTIPLIER) + " ₽/" + unit);
+const PRICE_NOTE = "Тарифы Alphy включают наценку 13,5% к публичным ценам провайдеров. Курс ЦБ на 10.10.2026: 84,9048 ₽ за $1. M — миллион токенов, K — тысяча запросов. Указаны базовые режимы; «от» — минимальная ставка. Cache Write — запись на 5 минут, где она тарифицируется отдельно.";
+
+const modelPricing = (model, now = new Date()) => model.priceAfter && moscowDay(now) >= Date.parse(model.priceAfter.from)
+  ? { ...model, ...model.priceAfter } : model;
 
 // Curated public pricing snapshot, checked 2026-10-11. Sources/conditions are stored per model.
 const MODELS = [
+  {"mark": "GO", "prov": "google", "name": "google/gemini-4-argon", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2, "output": "$10/M", "cacheRead": "$0.1/M", "cacheWrite": "—", "web": "$14/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image", "Video", "Audio"], "priceSource": "https://ai.google.dev/gemini-api/docs/pricing#gemini-4-argon", "priceNote": "Standard: вводный тариф до 30.11.2026 включительно; с 01.12.2026 input, output и cache read удваиваются. Output включает thinking-токены. Кэш только implicit, отдельной записи нет. Google Search: 5 000 бесплатных запросов в месяц суммарно для Gemini 3 и новее, затем ставка за каждую поисковую query. Контекст 1 048 576 токенов общий для input, thinking и output; синхронный output до 65 536, long decode до 1M. Только текстовый output.", "priceAfter": {"from": "2026-12-01", "input": "$4/M", "inp": 4, "output": "$20/M", "cacheRead": "$0.2/M"}},
   {"mark": "AN", "prov": "anthropic", "name": "anthropic/claude-haiku-5.5", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.1/M", "inp": 0.1, "output": "$0.5/M", "cacheRead": "$0.01/M", "cacheWrite": "$0.125/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 100 000 токенов; длинный контекст оплачивается по другой ставке."},
   {"mark": "MI", "prov": "mistral", "name": "mistral/mistral-large-4", "context": "1M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$0.68/M", "inp": 0.68, "output": "$2.09/M", "cacheRead": "$0.07/M", "cacheWrite": "—", "web": "—", "webSub": "", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models"},
   {"mark": "OA", "prov": "openai", "name": "openai/gpt-6.1-sol", "context": "1.05M", "latency": "—", "lat": 99, "throughput": "—", "tps": 0, "input": "$2/M", "inp": 2.0, "output": "$10/M", "cacheRead": "$0.1/M", "cacheWrite": "$2.5/M", "web": "$10/K", "webSub": "+ стоимость input", "mods": ["Text", "Code", "Image"], "priceSource": "https://openrouter.ai/api/v1/models", "priceNote": "Базовый тариф для промптов до 272 000 токенов; длинный контекст оплачивается по другой ставке."},
@@ -135,7 +149,7 @@ const DEMOS = [
   }
 ];
 
-const FEATURED = ["anthropic/claude-haiku-5.5", "mistral/mistral-large-4", "openai/gpt-6.1-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1", "anthropic/claude-sonnet-5.5"];
+const FEATURED = ["google/gemini-4-argon", "anthropic/claude-haiku-5.5", "mistral/mistral-large-4", "openai/gpt-6.1-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1", "anthropic/claude-sonnet-5.5"];
 const SORT_LABELS = { release: "по дате", latency: "по latency", throughput: "по throughput", input: "по цене input" };
 const PROV_LABELS = { all: "Все провайдеры", openai: "OpenAI", anthropic: "Anthropic", google: "Google", meta: "Meta", xai: "xAI", deepseek: "DeepSeek", alibaba: "Alibaba", moonshotai: "Moonshot AI", thinkingmachines: "Thinking Machines", mistral: "Mistral", cohere: "Cohere", bfl: "Black Forest Labs", bytedance: "ByteDance", perplexity: "Perplexity", prodia: "Prodia", quiverai: "QuiverAI", sakana: "Sakana AI", poolside: "Poolside", minimax: "MiniMax", kwaipilot: "Kwaipilot", inclusionai: "InclusionAI", fishaudio: "Fish Audio" };
 
@@ -294,9 +308,9 @@ const DIAGS = [
 ];
 
 const NEWS = [
+  ["14 октября", "Gemini 4 Argon теперь доступен на Alphy Gateway"],
   ["7 октября", "Claude Haiku 5.5 теперь доступен на Alphy Gateway"],
-  ["6 октября", "Mistral Large 4 теперь доступен на Alphy Gateway"],
-  ["29 сентября", "GPT-6.1 Sol теперь доступен на Alphy Gateway"]
+  ["6 октября", "Mistral Large 4 теперь доступен на Alphy Gateway"]
 ];
 
 const MODS = [["All", "Все"], ["Text"], ["Code"], ["Image"], ["Video"], ["Audio"], ["Embedding"]];
@@ -347,8 +361,8 @@ const brow = ([n, w, v], i) => `<div class="brow${i ? "" : " a"}"><span>${n}</sp
 // The provider prefix gets its own span: inline on desktop, a separate grey line on phones.
 const row = r => {
   const i = r.name.indexOf("/") + 1;
-  const note = r.priceNote || PRICE_NOTE;
-  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi" title="${note}">${rublePrice(r.input)}</span><span class="tv hi po" title="${note}">${rublePrice(r.output)}</span><span class="cc"><span>Read:<br>Write:</span><span>${rublePrice(r.cacheRead)}<br>${rublePrice(r.cacheWrite)}</span></span><span class="wc"><span>${rublePrice(r.web)}</span><span>${r.webSub}</span></span></div>`;
+  const note = PRICE_NOTE + (r.priceNote ? " " + r.priceNote : "");
+  return `<div class="tr"><span class="tn"><span class="tm">${r.mark}</span><span class="nm"><span class="np">${r.name.slice(0, i)}</span>${r.name.slice(i)}</span></span><span class="tv">${r.context}</span><span class="tv">${r.latency}</span><span class="tv">${r.throughput}</span><span class="tv hi" title="${note}">${rublePrice(r.input)}</span><span class="tv hi po" title="${note}">${rublePrice(r.output)}</span><span class="cc" title="${note}"><span>Read:<br>Write:</span><span>${rublePrice(r.cacheRead)}<br>${rublePrice(r.cacheWrite)}</span></span><span class="wc" title="${note}"><span>${rublePrice(r.web)}</span><span>${r.webSub}</span></span></div>`;
 };
 
 const globe = () => `<svg viewBox="-2 -2 804 804" aria-hidden="true"><g class="grid">${map([...GRID, "M12.702 500H787.299", "M53.59 600H746.41", "M135.425 700H664.575"], d => `<path d="${d}"/>`)}</g>${map(ROUTES, r => `<path class="packet" d="${r.d}" pathLength="1000" stroke-dasharray="24 976" opacity="0"/>`)}${map(NODES, ([x, y]) => `<g transform="translate(${x} ${y})"><circle class="ring" r="16"/><circle class="core" r="12"/><text x="0" y="0">a</text></g>`)}</svg>`;
@@ -416,54 +430,134 @@ const activityRandom = seed => {
 const activityQuantity = (n, one, few, many) => n + " " +
   (n % 100 >= 11 && n % 100 <= 14 ? many : n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many);
 
-function makeActivityDays(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en", { timeZone: "Europe/Moscow", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(now);
-  const part = key => Number(parts.find(p => p.type === key).value);
-  const end = Date.UTC(part("year"), part("month") - 1, part("day"));
-  const format = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" });
-  const types = ["experiment", "deployment", "retraining", "ab-test", "rollback"];
+// Templates have no expiry: date-seeded choices keep the same day stable in every window.
+const ACTIVITY_TARGETS = ["ранжирования", "рекомендаций", "поиска", "классификации", "модерации", "поддержки", "прогнозирования", "извлечения данных", "персонализации", "распознавания речи"];
+const ACTIVITY_SUMMARIES = {
+  experiment: [
+    "{exp} с квантизацией, latency −{gain}%",
+    "{exp} с батчингом, throughput +{gain}%",
+    "{exp} с маршрутизацией, p95 −{gain}%",
+    "{exp} с контекстом, качество без просадки",
+    "{exp} с дистилляцией, стоимость −{gain}%",
+    "{exp} с LoRA, лучший вариант отправлен на оценку",
+    "{exp} с префиксным кэшем, TTFT −{gain}%",
+    "{exp} с retrieval, релевантность +{gain}%",
+    "{exp} с ранжированием, новый baseline",
+    "{exp} с reward-моделью, метрики стабильны",
+    "{exp} с промптами, ошибок формата стало меньше",
+    "{exp} с speculative decoding, latency −{gain}%"
+  ],
+  deployment: [
+    "новая модель {target} в проде",
+    "новый проект: пайплайн развёрнут за день",
+    "выкатка {target}, трафик переведён постепенно",
+    "выкатка после теневого теста, метрики стабильны",
+    "новый endpoint, прогрев без простоя",
+    "выкатка нового ранкера, контрольная группа сохранена",
+    "выкатка: новая версия индекса, поиск без пауз",
+    "выкатка: обновлён маршрутизатор моделей",
+    "новая версия {target}, канарейка пройдена",
+    "выкатка: новый пайплайн оценки включён",
+    "выкатка: модель переведена на новый runtime",
+    "выкатка: резервный маршрут прошёл проверку"
+  ],
+  retraining: [
+    "дрейф данных → автопереобучение, откат не понадобился",
+    "переобучение {target} на свежей выборке",
+    "переобучение {target}, контроль качества пройден",
+    "переобучение после обновления разметки",
+    "автопереобучение {target}, новые данные учтены",
+    "переобучение на сложных примерах, ошибок стало меньше",
+    "переобучение после сезонного сдвига, метрики восстановлены",
+    "переобучение {target}, артефакты сохранены",
+    "переобучение после аудита датасета",
+    "автопереобучение, свежий checkpoint прошёл оценку",
+    "переобучение {target}, контрольная выборка без просадки",
+    "переобучение с новой разметкой, версия готова к тесту"
+  ],
+  "ab-test": [
+    "A/B-тест {target} завершён",
+    "A/B-тест: новый ранкер прошёл контроль",
+    "A/B-тест маршрутизации завершён, latency −{gain}%",
+    "A/B-тест промптов завершён, лучший вариант выбран",
+    "A/B-тест retrieval завершён, качество выросло",
+    "A/B-тест квантизации, метрики в допустимом диапазоне",
+    "A/B-тест батчинга завершён, throughput +{gain}%",
+    "A/B-тест {target}, контрольная группа без просадки",
+    "A/B-тест нового индекса завершён",
+    "A/B-тест кэша завершён, TTFT −{gain}%",
+    "A/B-тест fallback завершён, резерв работает",
+    "A/B-тест {target}, победитель прошёл оценку"
+  ],
+  rollback: [
+    "выкатка, откат за {minutes} мин после аномалии в метриках",
+    "выкатка, откат за {minutes} мин после роста p95",
+    "выкатка, откат после проверки качества, baseline восстановлен",
+    "выкатка, откат после канарейки, основной трафик без пауз",
+    "выкатка, откат ранкера, предыдущая версия восстановлена",
+    "выкатка, откат маршрутизатора после роста ошибок",
+    "выкатка, откат после проверки свежей выборки",
+    "выкатка, откат за {minutes} мин, причины разобраны",
+    "выкатка, откат к стабильному checkpoint",
+    "выкатка, откат индекса после проверки релевантности",
+    "выкатка, откат к прежнему runtime, latency восстановлен",
+    "выкатка, откат канарейки, контрольная группа без изменений"
+  ]
+};
+const activityIsActive = day => {
+  const weekday = new Date(day * DAY_MS).getUTCDay();
+  return activityRandom(day ^ 0xA1F4)() > (weekday === 0 || weekday === 6 ? .32 : .10);
+};
+
+// Each absolute 35-day block has balanced shuffled cycles of active event types.
+// It does not depend on the start of the visible 182-day window.
+function activityBlockTypes(block) {
+  const result = new Map(), types = Object.keys(ACTIVITY_SUMMARIES);
   let active = 0, cycle = [];
-  return Array.from({ length: 182 }, (_, i) => {
-    const date = new Date(end - (181 - i) * 86400000);
-    const random = activityRandom(Math.floor(date.getTime() / 86400000) ^ 0xA1F4);
-    const weekend = date.getUTCDay() === 0 || date.getUTCDay() === 6;
-    let summary = "без новых событий", type = "quiet", total = 0;
-    if (random() > (weekend ? .32 : .10)) {
-      // A shuffled cycle keeps the five primary event types evenly represented.
-      if (active % 5 === 0) {
-        cycle = types.slice();
-        const shuffle = activityRandom(Math.floor(active / 5) + 4137);
-        for (let j = 4; j > 0; j--) {
-          const k = Math.floor(shuffle() * (j + 1));
-          [cycle[j], cycle[k]] = [cycle[k], cycle[j]];
-        }
+  for (let offset = 0; offset < 35; offset++) {
+    const day = block * 35 + offset;
+    if (!activityIsActive(day)) continue;
+    if (active % 5 === 0) {
+      cycle = types.slice();
+      const shuffle = activityRandom((block * 7 + Math.floor(active / 5)) ^ 4137);
+      for (let j = 4; j > 0; j--) {
+        const k = Math.floor(shuffle() * (j + 1));
+        [cycle[j], cycle[k]] = [cycle[k], cycle[j]];
       }
-      type = cycle[active++ % 5];
-      const experiments = 1 + Math.floor(random() * (weekend ? 3 : 6));
-      const exp = activityQuantity(experiments, "эксперимент", "эксперимента", "экспериментов");
-      const target = ["ранжирования", "рекомендаций", "поиска"][Math.floor(random() * 3)];
+    }
+    result.set(day, cycle[active++ % 5]);
+  }
+  return result;
+}
+
+function makeActivityDays(now = new Date()) {
+  const end = moscowDay(now), blocks = new Map();
+  const format = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" });
+  return Array.from({ length: 182 }, (_, i) => {
+    const date = new Date(end - (181 - i) * DAY_MS), day = Math.floor(date.getTime() / DAY_MS);
+    const block = Math.floor(day / 35);
+    if (!blocks.has(block)) blocks.set(block, activityBlockTypes(block));
+    const type = blocks.get(block).get(day) || "quiet";
+    const random = activityRandom(day ^ 0xA1F4);
+    random(); // Same first draw determines whether this date is active.
+    const choose = values => values[Math.floor(random() * values.length)];
+    const weekend = date.getUTCDay() === 0 || date.getUTCDay() === 6;
+    const experiments = 1 + Math.floor(random() * (weekend ? 3 : 6));
+    const exp = activityQuantity(experiments, "эксперимент", "эксперимента", "экспериментов");
+    let summary = "без новых событий", total = 0;
+    if (type !== "quiet") {
+      const target = choose(ACTIVITY_TARGETS);
+      const values = { exp, target, gain: 3 + Math.floor(random() * 12), minutes: 2 + Math.floor(random() * 5) };
+      summary = choose(ACTIVITY_SUMMARIES[type]).replace(/\{(exp|target|gain|minutes)\}/g, (_, key) => values[key]);
       if (type === "experiment") {
         const deploy = random() > .55, retrain = random() > .8;
         total = experiments + Number(deploy) + Number(retrain);
-        summary = exp + (random() > .45 ? " с квантизацией, latency −" + (3 + Math.floor(random() * 12)) + "%" : "") +
-          (deploy ? ", выкатка" : "") + (retrain ? ", переобучение " + target : "");
-      } else if (type === "deployment") {
-        const preceding = random() > .4;
-        total = 1 + (preceding ? experiments : 0);
-        summary = (preceding ? exp + ", " : "") + (random() > .75 ? "новый проект: пайплайн развёрнут за день" : "новая модель " + target + " в проде");
-      } else if (type === "retraining") {
-        const preceding = random() > .5, deploy = random() > .65;
-        total = 1 + Number(deploy) + (preceding ? experiments : 0);
-        summary = (random() > .5 ? "дрейф данных → автопереобучение" : "переобучение " + target) +
-          (preceding ? ", " + exp : "") + (deploy ? ", выкатка" : "");
-      } else if (type === "ab-test") {
-        const preceding = random() > .5, deploy = random() > .45;
-        total = 1 + Number(deploy) + (preceding ? experiments : 0);
-        summary = "A/B-тест " + target + " завершён" + (deploy ? ", новая модель в проде" : "") + (preceding ? ", " + exp : "");
+        summary += (deploy ? ", выкатка" : "") + (retrain ? ", переобучение " + target : "");
       } else {
-        const preceding = random() > .55;
-        total = 2 + (preceding ? experiments : 0);
-        summary = "выкатка, откат за " + (2 + Math.floor(random() * 5)) + " мин после аномалии в метриках" + (preceding ? ", " + exp : "");
+        const preceding = random() > .5;
+        const deploy = (type === "retraining" || type === "ab-test") && random() > .55;
+        total = (type === "rollback" ? 2 : 1) + (preceding ? experiments : 0) + Number(deploy);
+        summary = (preceding ? exp + ", " : "") + summary + (deploy ? (type === "ab-test" ? ", новая модель в проде" : ", выкатка") : "");
       }
     }
     const level = total === 0 ? 0 : total <= 2 ? 1 : total <= 4 ? 2 : total <= 6 ? 3 : 4;
@@ -471,8 +565,8 @@ function makeActivityDays(now = new Date()) {
   });
 }
 
-const ACTIVITY_DAYS = makeActivityDays();
-const ACTIVITY_TOTAL = ACTIVITY_DAYS.reduce((total, day) => total + day.total, 0);
+let ACTIVITY_DAYS = makeActivityDays();
+let ACTIVITY_TOTAL = ACTIVITY_DAYS.reduce((total, day) => total + day.total, 0);
 const ACTIVITY_GLYPHS = [
   ["0000", "0000", "0110", "0001", "0111", "1001", "0111"],
   ["1100", "0100", "0100", "0100", "0100", "0100", "0110"],
@@ -1171,13 +1265,13 @@ function bindChart() {
 const st = { mod: "All", prov: "all", sort: "release", query: "" };
 const cols = { cache: true, web: true };
 
-function renderRows() {
+function renderRows(now = new Date()) {
   const q = st.query.toLowerCase();
   const rows = MODELS.filter(m =>
     (st.mod === "All" || m.mods.indexOf(st.mod) >= 0) &&
     (st.prov === "all" || m.prov === st.prov) &&
     (!q || m.name.toLowerCase().indexOf(q) >= 0)
-  );
+  ).map(model => modelPricing(model, now));
   if (st.sort === "latency") rows.sort((a, b) => a.lat - b.lat);
   else if (st.sort === "throughput") rows.sort((a, b) => b.tps - a.tps);
   else if (st.sort === "input") rows.sort((a, b) => a.inp - b.inp);
@@ -1453,6 +1547,47 @@ function bindActivity() {
   };
   addEventListener("scroll", updateTip, { passive: true });
   board.addEventListener("scroll", updateTip, { passive: true });
+  return now => {
+    unpin();
+    hide();
+    ACTIVITY_DAYS = makeActivityDays(now);
+    ACTIVITY_TOTAL = ACTIVITY_DAYS.reduce((total, day) => total + day.total, 0);
+    section.querySelector(".activity-count").textContent = activityQuantity(ACTIVITY_TOTAL, "событие", "события", "событий") + " за последние полгода";
+    days.forEach((button, i) => {
+      const day = ACTIVITY_DAYS[i];
+      button.dataset.date = day.date;
+      button.dataset.level = day.level;
+      button.dataset.total = day.total;
+      button.dataset.type = day.type;
+      button.setAttribute("aria-label", day.label);
+    });
+  };
+}
+
+// One wake-up at Moscow midnight; hidden tabs have no timer or polling.
+// Visibility/pageshow catch up after sleep, tab suspension or BFCache restoration.
+function bindDailyRefresh(refresh) {
+  let timer = 0, lastDay = moscowDay();
+  const cancel = () => { clearTimeout(timer); timer = 0; };
+  const sync = () => {
+    cancel();
+    if (document.hidden) return;
+    const now = new Date(), day = moscowDay(now);
+    if (day !== lastDay) { lastDay = day; refresh(now); }
+    const nextMidnight = day + DAY_MS - 3 * 3600000;
+    timer = setTimeout(sync, Math.max(1, nextMidnight - now.getTime() + 50));
+  };
+  const dispose = () => {
+    cancel();
+    document.removeEventListener("visibilitychange", sync);
+    removeEventListener("pageshow", sync);
+    removeEventListener("pagehide", pagehide);
+  };
+  const pagehide = event => { if (event.persisted) cancel(); else dispose(); };
+  document.addEventListener("visibilitychange", sync);
+  addEventListener("pageshow", sync);
+  addEventListener("pagehide", pagehide);
+  sync();
 }
 
 function mount() {
@@ -1467,7 +1602,8 @@ function mount() {
   bindPanel();
   bindChart();
   bindBars();
-  bindActivity();
+  const refreshActivity = bindActivity();
+  bindDailyRefresh(now => { refreshActivity(now); renderRows(now); });
   bindDecorativeMotion();
   if (!SHOW_DEMO_ANSWER) showNotice();
   if (!API_ENDPOINT.trim()) bindAuto();
