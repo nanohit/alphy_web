@@ -30,8 +30,9 @@ const moscowDay = (now = new Date()) => {
 const USD_RUB = 84.9048; // CBR USD rate for 2026-10-10, effective on 2026-10-11.
 const PRICE_MULTIPLIER = 1.135;
 const rubleNumber = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rubleAmount = amount => Number(amount) * USD_RUB * PRICE_MULTIPLIER;
 const rublePrice = value => value === "Free" ? "0 ₽" : value.replace(/\$([\d.]+)\s*\/\s*(.*)/, (_, amount, unit) =>
-  rubleNumber.format(Number(amount) * USD_RUB * PRICE_MULTIPLIER) + " ₽/" + unit);
+  rubleNumber.format(rubleAmount(amount)) + " ₽/" + unit);
 const PRICE_NOTE = "Тарифы Alphy включают наценку 13,5% к публичным ценам провайдеров. Курс ЦБ на 10.10.2026: 84,9048 ₽ за $1. M — миллион токенов, K — тысяча запросов. Указаны базовые режимы; «от» — минимальная ставка. Cache Write — запись на 5 минут, где она тарифицируется отдельно.";
 
 const modelPricing = (model, now = new Date()) => model.priceAfter && moscowDay(now) >= Date.parse(model.priceAfter.from)
@@ -659,6 +660,11 @@ const page = () => `
 </div></div>
 <div class="tfoot"><span id="count"></span><span title="${PRICE_NOTE}">Цены в ₽ · M = 1 млн токенов</span></div>
 </div>
+</section>
+
+<section id="model-benchmarks" class="wrap st model-benchmarks" aria-labelledby="model-benchmarks-title">
+<h2 id="model-benchmarks-title">Стоимость и качество</h2>
+<div class="bench-loading" role="status">Загрузка сравнения моделей…</div>
 </section>
 
 <section id="cloud" class="wrap st">
@@ -1590,6 +1596,35 @@ function bindDailyRefresh(refresh) {
   sync();
 }
 
+// Load the comparison only near the viewport. No framework or background polling.
+let refreshBenchmarks = () => {};
+function bindBenchmarks() {
+  const section = $("model-benchmarks");
+  let pending = false;
+  const load = async () => {
+    if (pending) return;
+    pending = true;
+    try {
+      const { mountBenchmarks } = await import(BASE + "benchmarks.js");
+      refreshBenchmarks = mountBenchmarks(section, {
+        getCatalog: now => MODELS.map(model => modelPricing(model, now)),
+        rubleAmount, priceNote: PRICE_NOTE
+      });
+      observer.disconnect();
+    } catch (error) {
+      pending = false;
+      section.querySelector(".bench-loading").innerHTML = 'Сравнение не загрузилось. <button type="button">Повторить</button>';
+      section.querySelector(".bench-loading button").onclick = load;
+      console.error("Alphy comparison could not load", error);
+    }
+  };
+  const observer = new IntersectionObserver(entries => {
+    if (entries.some(entry => entry.isIntersecting)) load();
+  }, { rootMargin: "240px" });
+  observer.observe(section);
+  addEventListener("pagehide", event => { if (!event.persisted) observer.disconnect(); });
+}
+
 function mount() {
   const root = document.createElement("div");
   root.className = "root";
@@ -1603,7 +1638,8 @@ function mount() {
   bindChart();
   bindBars();
   const refreshActivity = bindActivity();
-  bindDailyRefresh(now => { refreshActivity(now); renderRows(now); });
+  bindDailyRefresh(now => { refreshActivity(now); renderRows(now); refreshBenchmarks(now); });
+  bindBenchmarks();
   bindDecorativeMotion();
   if (!SHOW_DEMO_ANSWER) showNotice();
   if (!API_ENDPOINT.trim()) bindAuto();
